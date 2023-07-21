@@ -1,0 +1,46 @@
+load smt.maude
+
+mod PTA-COFFEE is
+    protecting REAL .
+    sorts State NState DState Location .
+    subsorts NState DState < State .
+
+    vars X1 X2 X1' X2' : Real .
+    vars P1 P2 P3 : Real .
+    var T : Real .
+
+    --- Configurations
+    ops idle addSugar preparingCoffee done : -> Location [ctor] .
+    op <_:_;_> <_;_;_> : Location Real Real Real Real Real -> DState [ctor] .
+    op [_:_;_] <_;_;_> : Location Real Real Real Real Real -> NState [ctor] .
+
+    crl [idle-bStart] : < idle : X1 ; X2 > < P1 ; P2 ; P3 > => [ addSugar : X1' ; X2' ] < P1 ; P2 ; P3 >
+                        if (X1' === 0/1 and X2' === 0/1 and X2' <= P2) = true [nonexec] .
+
+    crl [idle-tick] : [ idle : X1 ; X2 ] < P1 ; P2 ; P3 > => < idle : X1' ; X2' > < P1 ; P2 ; P3 >
+                        if (X1' === X1 + T and X2' === X2 + T and T >= 0/1) = true [nonexec] .
+
+    crl [add-sugar-bSugar] : < addSugar : X1 ; X2 > < P1 ; P2 ; P3 > => [ addSugar : X1' ; X2 ] < P1 ; P2 ; P3 >
+                        if (X1' === 0/1 and X1 >= P1 and X2 <= P2) = true [nonexec] .
+
+    crl [add-sugar-cup] : < addSugar : X1 ; X2 > < P1 ; P2 ; P3 > => [ preparingCoffee : X1 ; X2 ] < P1 ; P2 ; P3 >
+                        if (X2 === P2 and X2 <= P3) = true .
+
+    crl [add-sugar-tick] : [ addSugar : X1 ; X2 ] < P1 ; P2 ; P3 > => < addSugar : X1' ; X2' > < P1 ; P2 ; P3 >
+                        if (X1' === X1 + T and X2' === X2 + T and X2' <= P2 and T >= 0/1) = true [nonexec] .
+
+    crl [preparing-coffee-coffee] : < preparingCoffee : X1 ; X2 > < P1 ; P2 ; P3 > => [ done : X1' ; X2 ] < P1 ; P2 ; P3 >
+                        if (X1' === 0/1 and X2 === P3 and X1' <= 10/1) = true [nonexec] .
+
+    crl [preparing-coffee-tick] : [ preparingCoffee : X1 ; X2 ] < P1 ; P2 ; P3 > => < preparingCoffee : X1' ; X2' > < P1 ; P2 ; P3 >
+                        if (X1' === X1 + T and X2' === X2 + T and X2' <= P3 and T >= 0/1) = true [nonexec] .
+
+    crl [done-sleep] : < done : X1 ; X2 > < P1 ; P2 ; P3 > => [ idle : X1 ; X2 ] < P1 ; P2 ; P3 >
+                        if (X1 === 10/1) = true .
+
+    crl [done-bStart] : < done : X1 ; X2 > < P1 ; P2 ; P3 > => [ addSugar : X1' ; X2' ] < P1 ; P2 ; P3 >
+                        if (X1' === 0/1 and X2' === 0/1 and X2' <= P2) = true [nonexec] .
+
+    crl [done-tick] : [ done : X1 ; X2 ] < P1 ; P2 ; P3 > => < done : X1' ; X2' > < P1 ; P2 ; P3 >
+                        if (X1' === X1 + T and X2' === X2 + T and X1' <= 10/1 and T >= 0/1) = true [nonexec] .
+endm

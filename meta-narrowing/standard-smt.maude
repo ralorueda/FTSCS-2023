@@ -1,0 +1,441 @@
+load utilities.maude
+
+fmod STANDARD-SMT-NARROWING is
+    protecting NARROWING-UTILITIES .
+
+    --- Variables declaration
+    var VOPTIONS : VariantOptionSet .   vars N M : Bound .   vars NZN NZM : NzBound .      var MOD : Module .   var CTX1 CTX2 : Context .  
+    vars ITERM TTERM T1 T2 INITSMT SMT1 SMT2 CTR1 : Term .   var SEARCH : SearchType .   var UNIFCOUNTER : NzNat .   vars SOLUTIONS1 SOLUTIONS2 : Solutions .   
+    vars SUBS1 SUBS2 SUBS3 SUBS4 ACSUBS1 ACSUBS2 : Substitution .   vars NODES1 NODES2 NODES3 : Nodes .   var NARRAPPLYRES1 : NarrowingApplyResult .   
+    vars QID1 QID2 RLABEL1 RLABEL2 : Qid .   var TYPE1 TYPE2 : Type .   vars BOOL1 BOOL2 : Bool .
+    vars NODEID1 VCOUNTER NCOUNTER SCOUNTER BRANCH1 BRANCH2 PARENTID DEPTH1 DEPTH2 GPARENTID SOLID  : Nat .  
+    var SMTFLAG : SMTFlag .   var NODE1 : Node .   var FINALSMTFLAG : FinalSMTFlag .
+        
+
+
+    ----------------------------------------------------------------------------------------------------------
+    --- Transforms the user command into the defined data structures. The execution will depend on the     ---
+    --- search arrow used (computation of the initial node or not).                                        ---
+    ----------------------------------------------------------------------------------------------------------
+
+    --- If there are no variant options, use none
+    eq smt narrowing [N,M] in MOD : ITERM SEARCH TTERM with condition: INITSMT
+            = none smt none narrowing [N,M] in MOD : ITERM SEARCH TTERM with condition: INITSMT .
+
+    eq smt SMTFLAG narrowing [N,M] in MOD : ITERM SEARCH TTERM with condition: INITSMT
+            = none smt SMTFLAG narrowing [N,M] in MOD : ITERM SEARCH TTERM with condition: INITSMT .
+
+    --- Solutions limit = 0 -> No solutions found
+    eq VOPTIONS smt SMTFLAG narrowing [0,M] in MOD : ITERM SEARCH TTERM with condition: INITSMT
+            = toString(noSolutions) .    
+
+    --- Solutions limit =/= 0 -> Begin with the algorithm (rename variables first)
+    eq VOPTIONS smt SMTFLAG narrowing [NZN,M] in MOD : ITERM =>1 TTERM with condition: INITSMT
+            = generateNode(
+                {std-smt, transformMod(MOD), 
+                ITERM --- Rename initial term
+                =>1
+                TTERM, --- Rename target term
+                {SMTFLAG,INITSMT}, 
+                (VOPTIONS), < NZN,1 >,
+                | 1, 
+                1, --- Update variable counter  
+                0 |,
+                [{0, ITERM, none, 0, 0, 0, 
+                {INITSMT : metaCheck(MOD, INITSMT)}, # noSolution #}],
+                [empty]}) .
+    
+    eq VOPTIONS smt SMTFLAG narrowing [NZN,M] in MOD : ITERM =>+ TTERM with condition: INITSMT
+            = generateNode(
+                {std-smt, transformMod(MOD), 
+                ITERM --- Rename initial term
+                =>+
+                TTERM, --- Rename target term
+                {SMTFLAG,INITSMT}, 
+                (VOPTIONS), < NZN,M >,
+                | 1, 
+                1, --- Update variable counter 
+                0 |,
+                [{0, ITERM, none, 0, 0, 0, 
+                {INITSMT : metaCheck(MOD, INITSMT)}, # noSolution #}],
+                [empty]}) .
+
+    eq VOPTIONS smt SMTFLAG narrowing [NZN,M] in MOD : ITERM SEARCH TTERM with condition: INITSMT
+            = initialTermSolutions(
+                {std-smt, transformMod(MOD), 
+                ITERM --- Rename initial term
+                SEARCH
+                TTERM, --- Rename target term
+                {SMTFLAG,INITSMT}, 
+                (VOPTIONS), < NZN,M >,
+                | 1, 
+                1, --- Update variable counter 
+                0 |,
+                [{0, ITERM, none, 0, 0, 0, 
+                {INITSMT : metaCheck(MOD, INITSMT)}, # findSolutions(transformMod(MOD), 
+                ITERM --- Rename initial term
+                =? 
+                TTERM, --- Rename target term
+                VOPTIONS, empty, 0) #}],
+                [empty]}) [owise] .
+
+
+
+    ----------------------------------------------------------------------------------------------------------
+    --- Search for solutions of a node                                                                     ---
+    ----------------------------------------------------------------------------------------------------------
+
+    eq findSolutions(MOD, ITERM =? TTERM, VOPTIONS, empty, 0) 
+            = metaVariantUnify(MOD, ITERM =? TTERM, empty, '%, VOPTIONS, 0) ; 
+              findSolutions(MOD, ITERM =? TTERM, VOPTIONS, empty, 1) .
+
+    eq {SUBS1, QID1} ; findSolutions(MOD, ITERM =? TTERM, VOPTIONS, empty, UNIFCOUNTER)
+            = {SUBS1, QID1} ; metaVariantUnify(MOD, ITERM =? TTERM, empty, '%, VOPTIONS, UNIFCOUNTER) ; 
+              findSolutions(MOD, ITERM =? TTERM, VOPTIONS, empty, UNIFCOUNTER + 1) .
+    
+    --- Stop looking for unifiers when noUnifier / noUnifierIncomplete is returned
+    eq SOLUTIONS1 ; noUnifier ; findSolutions(MOD, ITERM =? TTERM, VOPTIONS, empty, UNIFCOUNTER)
+            = SOLUTIONS1 .
+
+    eq SOLUTIONS1 ; noUnifierIncomplete ; findSolutions(MOD, ITERM =? TTERM, VOPTIONS, empty, UNIFCOUNTER)
+            = SOLUTIONS1 .
+
+
+    ----------------------------------------------------------------------------------------------------------
+    --- Compute the solutions of the initial node (if they exist)                                          ---
+    ----------------------------------------------------------------------------------------------------------
+
+    --- If initial SMT constraints are not satisfiable, return output
+    eq initialTermSolutions({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [{0, ITERM, none, 0, 0, 0, {INITSMT : false}, # SOLUTIONS1 # }], [empty]})
+            = toString({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+                [{0, ITERM, none, 0, 0, 0, {INITSMT : false}, # SOLUTIONS1 # }], [empty]}) .
+
+    --- If Max solutions reached or SMT, return output (remove unifiers left iteratively first)
+    eq initialTermSolutions({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < 0,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [{0, ITERM, none, 0, 0, 0, {INITSMT : true}, # SOLUTIONS1 ; {SUBS1, QID1} # }], [empty]})
+            = initialTermSolutions({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < 0,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+                [{0, ITERM, none, 0, 0, 0, {INITSMT : true}, # SOLUTIONS1 # }], [empty]}) .
+
+    eq initialTermSolutions({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < 0,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [{0, ITERM, none, 0, 0, 0, {INITSMT : true}, # SOLUTIONS1 # }], [empty]})
+            = toString({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < 0,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+                [{0, ITERM, none, 0, 0, 0, {INITSMT : true}, # SOLUTIONS1 # }], [empty]}) [owise] .
+
+    --- Get solutions from unifiers when MaxSol = unbounded
+    eq initialTermSolutions({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < unbounded,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [{0, ITERM, none, 0, 0, 0, {INITSMT : true}, # SOLUTIONS1 ; {SUBS1, QID1} ; SOLUTIONS2 # }], [empty]})
+            = initialTermSolutions({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < unbounded,M >, | NCOUNTER, VCOUNTER, SCOUNTER + 1 |,
+                [{0, ITERM, none, 0, 0, 0, {INITSMT : true}, # SOLUTIONS1 ; {SCOUNTER, SUBS1} ; SOLUTIONS2 # }], [empty]}) .
+
+    --- Get solutions from unifiers when MaxSol is a nat > 0
+    eq initialTermSolutions({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < s(N),M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [{0, ITERM, none, 0, 0, 0, {INITSMT : true}, # SOLUTIONS1 ; {SUBS1, QID1} ; SOLUTIONS2 # }], [empty]})
+            = initialTermSolutions({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER + 1 |,
+                [{0, ITERM, none, 0, 0, 0, {INITSMT : true}, # SOLUTIONS1 ; {SCOUNTER, SUBS1} ; SOLUTIONS2 # }], [empty]}) .
+
+    --- If all unifiers have been processed, continue with the node generation
+    eq initialTermSolutions({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < NZN,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [{0, ITERM, none, 0, 0, 0, {INITSMT : true}, # SOLUTIONS1 # }], [empty]})
+            = generateNode({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < NZN,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+                [{0, ITERM, none, 0, 0, 0, {INITSMT : true}, # SOLUTIONS1 # }], [empty]}) [owise] .
+
+
+    ----------------------------------------------------------------------------------------------------------
+    --- Generate a new node in the search tree                                                             ---
+    ----------------------------------------------------------------------------------------------------------
+
+    --- Stop if MaxDepth = 0 
+    eq generateNode({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,0 >, | NCOUNTER, VCOUNTER, SCOUNTER |, [NODES1], [NODES2]})
+            = toString({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,0 >, | NCOUNTER, VCOUNTER, SCOUNTER |, [NODES1], [NODES2]}) .
+    
+    --- If initial SMT constraints are not satisfiable, return output
+    eq generateNode({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,NZM >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+        [{0, ITERM, none, 0, 0, 0, {INITSMT : false}, # SOLUTIONS1 # }], [empty]})
+            = toString({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,NZM >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                        [{0, ITERM, none, 0, 0, 0, {INITSMT : false}, # SOLUTIONS1 # }], [empty]}) .
+
+    --- Generate the first node
+    eq generateNode({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,NZM >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+        [{0, ITERM, none, 0, 0, 0, {INITSMT : true}, # SOLUTIONS1 # }], [empty]})
+            = renameVars({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,NZM >, | NCOUNTER + 1, VCOUNTER, SCOUNTER |, 
+                [{0, ITERM, none, 0, 0, 0, {INITSMT : true}, # SOLUTIONS1 # }], 
+                [rNode({NCOUNTER, metaNarrowingApply(MOD, ITERM, empty, '%, VOPTIONS, 0), none, 0, 1, 0, {INITSMT : true}, # noSolution # })]}) .
+
+    --- Generate nodes in depth 1 (MaxDepth = 1)
+    eq generateNode({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,1 >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+        [{0, ITERM, none, 0, 0, 0, {INITSMT : true}, # SOLUTIONS1 # } ; NODES1], 
+        [{NODEID1, NARRAPPLYRES1, ACSUBS1, BRANCH1, 1, 0, {SMT1 : BOOL1}, # SOLUTIONS2 # } ; NODES2]})
+            = renameVars({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,1 >, | NCOUNTER + 1, VCOUNTER, SCOUNTER |, 
+                [{0, ITERM, none, 0, 0, 0, {INITSMT : true}, # SOLUTIONS1 # } ;
+                NODES1 ; 
+                {NODEID1, NARRAPPLYRES1, ACSUBS1, BRANCH1, 1, 0, {SMT1 : BOOL1}, # SOLUTIONS2 # }], 
+                [rNode({NCOUNTER, 
+                metaNarrowingApply(MOD, ITERM, empty, '%, VOPTIONS, s(BRANCH1)), 
+                none, s(BRANCH1), 1, 0, {INITSMT : true}, # noSolution # }) ; NODES2]}) .
+
+    --- Generate nodes in depth 1 (MaxDepth > 1)
+    eq generateNode({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,NZM >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+        [{0, ITERM, none, 0, 0, 0, {INITSMT : true}, # SOLUTIONS1 # } ; NODES1], 
+        [{NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, 1, 0, {SMT1 : false}, # SOLUTIONS2 # } ; NODES2]})
+            = renameVars({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,NZM >, | NCOUNTER + 1, VCOUNTER, SCOUNTER |, 
+                [{0, ITERM, none, 0, 0, 0, {INITSMT : true}, # SOLUTIONS1 # } ;
+                NODES1 ; 
+                {NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, 1, 0, {SMT1 : false}, # SOLUTIONS2 # }], 
+                [rNode({NCOUNTER, 
+                metaNarrowingApply(MOD, ITERM, empty, '%, VOPTIONS, s(BRANCH1)), 
+                none, s(BRANCH1), 1, 0, {INITSMT : true}, # noSolution # }) ; 
+                NODES2]}) [owise] .
+                
+    eq generateNode({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,NZM >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+        [{0, ITERM, none, 0, 0, 0, {INITSMT : true}, # SOLUTIONS1 # } ; NODES1], 
+        [{NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, 1, 0, {SMT1 : true}, # SOLUTIONS2 # } ; NODES2]})
+            = renameVars({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,NZM >, | NCOUNTER + 2, VCOUNTER, SCOUNTER |, 
+                [{0, ITERM, none, 0, 0, 0, {INITSMT : true}, # SOLUTIONS1 # } ;
+                NODES1 ; 
+                {NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, 1, 0, {SMT1 : true}, # SOLUTIONS2 # }], 
+                [rNode({NCOUNTER, 
+                metaNarrowingApply(MOD, ITERM, empty, '%, VOPTIONS, s(BRANCH1)), 
+                none, s(BRANCH1), 1, 0, {INITSMT : true}, # noSolution # }) ; 
+                NODES2 ;
+                rNode({NCOUNTER + 1, 
+                metaNarrowingApply(MOD, T1, empty, '%, VOPTIONS, 0), 
+                ACSUBS1, 0, 2, NODEID1, {SMT1 : true}, # noSolution # })]}) [owise] .
+
+    --- Generate nodes in depth > 1 (MaxDepth reached)
+    eq generateNode({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,s(s(M)) >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+        [NODES1 ; {PARENTID, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, GPARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 # } ; NODES2], 
+        [{NODEID1, NARRAPPLYRES1, ACSUBS2, BRANCH2, s(s(M)), PARENTID, {SMT2 : BOOL2}, # SOLUTIONS2 # } ; NODES3]})
+            = renameVars({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,s(s(M)) >, | NCOUNTER + 1, VCOUNTER, SCOUNTER |, 
+                [NODES1 ; {PARENTID, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, GPARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 # } ; 
+                NODES2 ;
+                {NODEID1, NARRAPPLYRES1, ACSUBS2, BRANCH2, s(s(M)), PARENTID, {SMT2 : BOOL2}, # SOLUTIONS2 # }],
+                [rNode({NCOUNTER, 
+                metaNarrowingApply(MOD, T1, empty, '%, VOPTIONS, s(BRANCH2)), 
+                ACSUBS1, s(BRANCH2), s(s(M)), PARENTID, {SMT1 : BOOL1}, # noSolution # }) ; NODES3]}) .  
+
+    --- Generate nodes in depth > 1 (MaxDepth not reached)
+    eq generateNode({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,NZM >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+        [NODES1 ; {PARENTID, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, GPARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 # } ; NODES2], 
+        [{NODEID1, {T2, TYPE2, CTX2, RLABEL2, SUBS3, SUBS4, QID2}, ACSUBS2, BRANCH2, DEPTH2, PARENTID, {SMT2 : false}, # SOLUTIONS2 # } ; NODES3]})
+            = renameVars({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,NZM >, | NCOUNTER + 1, VCOUNTER, SCOUNTER |, 
+                [NODES1 ; {PARENTID, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, GPARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 # } ; 
+                NODES2 ;
+                {NODEID1, {T2, TYPE2, CTX2, RLABEL2, SUBS3, SUBS4, QID2}, ACSUBS2, BRANCH2, DEPTH2, PARENTID, {SMT2 : false}, # SOLUTIONS2 # }],
+                [rNode({NCOUNTER, 
+                metaNarrowingApply(MOD, T1, empty, '%, VOPTIONS, s(BRANCH2)), 
+                ACSUBS1, s(BRANCH2), DEPTH2, PARENTID, {SMT1 : BOOL1}, # noSolution # }) ; 
+                NODES3]}) [owise] .
+
+    eq generateNode({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,NZM >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+        [NODES1 ; {PARENTID, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, GPARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 # } ; NODES2], 
+        [{NODEID1, {T2, TYPE2, CTX2, RLABEL2, SUBS3, SUBS4, QID2}, ACSUBS2, BRANCH2, DEPTH2, PARENTID, {SMT2 : true}, # SOLUTIONS2 # } ; NODES3]})
+            = renameVars({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,NZM >, | NCOUNTER + 2, VCOUNTER, SCOUNTER |, 
+                [NODES1 ; {PARENTID, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, GPARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 # } ; 
+                NODES2 ;
+                {NODEID1, {T2, TYPE2, CTX2, RLABEL2, SUBS3, SUBS4, QID2}, ACSUBS2, BRANCH2, DEPTH2, PARENTID, {SMT2 : true}, # SOLUTIONS2 # }],
+                [rNode({NCOUNTER, 
+                metaNarrowingApply(MOD, T1, empty, '%, VOPTIONS, s(BRANCH2)), 
+                ACSUBS1, s(BRANCH2), DEPTH2, PARENTID, {SMT1 : BOOL1}, # noSolution # }) ; 
+                NODES3 ;
+                rNode({NCOUNTER + 1, 
+                metaNarrowingApply(MOD, T2, empty, '%, VOPTIONS, 0), 
+                ACSUBS2, 0, s(DEPTH2), NODEID1, {SMT2 : true}, # noSolution # })]}) [owise] . 
+
+
+
+    ----------------------------------------------------------------------------------------------------------
+    --- Rename variables in a node                                                                         ---
+    ----------------------------------------------------------------------------------------------------------
+    
+    --- Remove the node if it is deeper than MaxDepth
+    eq renameVars({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [NODES2 ; rNode({NODEID1, NARRAPPLYRES1, ACSUBS1, BRANCH1, s(M), PARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 # }) ; NODES3]})
+                    =  renameVars({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                            [NODES1], [NODES2 ; NODES3]}) .
+
+    --- End the algorithm if the NodeList to proccess is empty
+    eq renameVars({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, [NODES1], [empty]})
+                    =  toString({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, [NODES1], [empty]}) .
+
+    --- If the result of metaNarrowingApply was failure, remove the node
+    eq renameVars({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [rNode({NODEID1, failure, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 # }) ; NODES2]})
+                    =  renameVars({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                            [NODES1], [NODES2]}) [owise] .
+
+    --- Rename variables of the new nodes
+    eq renameVars({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [NODES2 ; rNode({NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, none, BRANCH1, DEPTH1, PARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 # }) ; NODES3]})
+                    = renameVars({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, 
+                            VCOUNTER + getVarsNumber(applySub((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)), rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER))),
+                            SCOUNTER |, 
+                            [NODES1], 
+                            [NODES2 ; {NODEID1, 
+                            {applySub(T1, rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER)), 
+                            TYPE1, CTX1, RLABEL1, 
+                            applySub(SUBS1, rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER)), 
+                            applySub(SUBS2, rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER)), 
+                            QID1}, 
+                            reduceSub(MOD, applySub(SUBS1, rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER))), 
+                            BRANCH1, DEPTH1, PARENTID, {applySub(SMT1, applySub(SUBS1, rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER))) : BOOL1}, 
+                            # SOLUTIONS1 # } ; NODES3]}) .
+
+    eq renameVars({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [NODES2 ; rNode({NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 # }) ; NODES3]})
+                    = renameVars({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, 
+                            VCOUNTER + getVarsNumber(applySub((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)), rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER))),
+                            SCOUNTER |, 
+                            [NODES1], 
+                            [NODES2 ; {NODEID1, 
+                            {applySub(T1, rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER)), 
+                            TYPE1, CTX1, RLABEL1, 
+                            applySub(SUBS1, rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER)), 
+                            applySub(SUBS2, rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER)), 
+                            QID1}, 
+                            reduceSub(MOD, applySub(ACSUBS1, applySub(SUBS1, rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER)))), 
+                            BRANCH1, DEPTH1, PARENTID, {applySub(SMT1, applySub(SUBS1, rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER))) : BOOL1}, 
+                            # SOLUTIONS1 # } ; NODES3]}) [owise] .
+
+    --- If there are not more nodes to rename, continue
+    eq renameVars({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, [NODES1], [NODES2]})
+                    = checkSMT({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, [NODES1], [NODES2]}) [owise] .
+
+
+    
+    ----------------------------------------------------------------------------------------------------------
+    --- Add the new SMT constraints (if needed) and use the metaChecker to check them                      ---
+    ----------------------------------------------------------------------------------------------------------
+    eq checkSMT({std-smt, MOD, ITERM SEARCH TTERM, {none,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [{NODEID1, {('_>>_[SMT1,T1]), TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT2 : BOOL1}, # SOLUTIONS1 # } ; NODES2]})
+        = unifyTerms(({std-smt, MOD, ITERM SEARCH TTERM, {none,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [{NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, PARENTID, 
+                {('_and_[SMT1,SMT2]) : metaCheck(MOD, ('_and_[SMT1,SMT2]))}, # SOLUTIONS1 # } ; NODES2]})) .
+                
+    eq checkSMT({std-smt, MOD, ITERM SEARCH TTERM, {none,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [{NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 # } ; NODES2]})
+        = unifyTerms(({std-smt, MOD, ITERM SEARCH TTERM, {none,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [{NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, PARENTID, 
+                {SMT1 : metaCheck(MOD, SMT1)}, # SOLUTIONS1 # } ; NODES2]})) [owise] . 
+
+    eq checkSMT({std-smt, MOD, ITERM SEARCH TTERM, {FINALSMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [{NODEID1, {('_>>_[SMT1,T1]), TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT2 : BOOL1}, # SOLUTIONS1 # } ; NODES2]})
+        = checkSMT(({std-smt, MOD, ITERM SEARCH TTERM, {FINALSMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [{NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, PARENTID, 
+                {('_and_[SMT1,SMT2]) : true}, # SOLUTIONS1 # } ; NODES2]})) .
+                
+    eq checkSMT({std-smt, MOD, ITERM SEARCH TTERM, {FINALSMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [{NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 # } ; NODES2]})
+        = unifyTerms(({std-smt, MOD, ITERM SEARCH TTERM, {FINALSMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [{NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, PARENTID, 
+                {SMT1 : true}, # SOLUTIONS1 # } ; NODES2]})) [owise] .
+
+
+
+    ----------------------------------------------------------------------------------------------------------
+    --- Try to unify a term related to a generated node and get solutions                                  ---
+    ----------------------------------------------------------------------------------------------------------
+    
+    --- Try to find solutions if SMT constraints are satisfiable, or continue if not
+    eq unifyTerms({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [{NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : true}, # SOLUTIONS1 # } ; NODES2]})
+                    = termSolutions({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                            [NODES1], [{NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : true}, 
+                            # SOLUTIONS1 ; findSolutions(MOD, T1 =? TTERM, VOPTIONS, empty, 0) # } ; NODES2]}) .
+
+    eq unifyTerms({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [{NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : false}, # SOLUTIONS1 # } ; NODES2]})
+                    = generateNode({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                            [NODES1], [{NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : false}, 
+                            # SOLUTIONS1 # } ; NODES2]}) .
+
+    --- If Max solutions reached, return output (remove unifiers left iteratively first)
+    eq termSolutions({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < 0,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [NODES1], [NODES2 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 ; {SUBS1, QID1} # } ; NODES3]})
+            = termSolutions(
+                    {std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < 0,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+                    [NODES1], [NODES2 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 # } ; NODES3]}) .
+
+    eq termSolutions({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < 0,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [NODES1], [NODES2 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 # } ; NODES3]})
+            = toString({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < 0,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+                    [NODES1 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 # }], [NODES2 ; NODES3]}) [owise] .
+
+    --- Get solutions from unifiers when MaxSol = unbounded
+    eq termSolutions({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < unbounded,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [NODES1], [NODES2 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 ; {SUBS1, QID1} ; SOLUTIONS2 # } ; NODES3]})
+            = termSolutions({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < unbounded,M >, | NCOUNTER, VCOUNTER, SCOUNTER + 1 |,
+               [NODES1], [NODES2 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 ; {SCOUNTER, SUBS1} ; SOLUTIONS2 # } ; NODES3]}) .
+
+    --- Get solutions from unifiers when MaxSol is a nat > 0
+    eq termSolutions({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < s(N),M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [NODES1], [NODES2 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 ; {SUBS1, QID1} ; SOLUTIONS2 # } ; NODES3]})
+            = termSolutions({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER + 1 |,
+               [NODES1], [NODES2 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 ; {SCOUNTER, SUBS1} ; SOLUTIONS2 # } ; NODES3]}) .
+
+    --- If all unifiers have been processed, continue with the node generation
+    eq termSolutions({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < NZN,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [NODES1], [NODES2 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 # } ; NODES3]})
+            = generateNode({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < NZN,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+                    [NODES1], [NODES2 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 # } ; NODES3]}) [owise] .    
+
+
+
+    ----------------------------------------------------------------------------------------------------------
+    --- Check SMT conditions before toString if "final check" flag was active                              ---
+    ----------------------------------------------------------------------------------------------------------
+    eq finalCheckSMT(MOD, empty) = empty .
+
+    eq finalCheckSMT(MOD, {0, ITERM, none, 0, 0, 0, {SMT1 : BOOL1}, # SOLUTIONS1 # } ; NODES1)
+        = {0, ITERM, none, 0, 0, 0, {SMT1 : metaCheck(MOD,SMT1)}, # SOLUTIONS1 # } ; 
+          finalCheckSMT(MOD, NODES1) .
+
+    eq finalCheckSMT(MOD, {NODEID1, NARRAPPLYRES1, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : BOOL1}, # SOLUTIONS1 # } ; NODES1)
+        = {NODEID1, NARRAPPLYRES1, ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : metaCheck(MOD,SMT1)}, # SOLUTIONS1 # } ; 
+          finalCheckSMT(MOD, NODES1) .
+
+
+
+    ----------------------------------------------------------------------------------------------------------
+    --- Prepare the output so it can be readable                                                           ---
+    ----------------------------------------------------------------------------------------------------------
+
+    --- Return the desired output
+    eq toString(noSolutions) = No solutions found .
+    
+    eq toString({std-smt, MOD, ITERM SEARCH TTERM, {final check,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, [NODES1], [NODES2]}) 
+        = printSolutions(finalCheckSMT(MOD,NODES1), 1) .
+
+    eq toString({std-smt, MOD, ITERM SEARCH TTERM, {SMTFLAG,INITSMT}, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, [NODES1], [NODES2]}) 
+        = printSolutions(NODES1, 1) [owise] .
+
+    eq printSolutions(empty, SCOUNTER) = empty .
+
+    eq printSolutions(({0, ITERM, none, 0, 0, 0, {SMT1 : true}, # {SOLID, SUBS1} ; SOLUTIONS1 # } ; NODES1), SCOUNTER)
+        = (### Solution SCOUNTER ###
+           state: ITERM
+           accumulated substitution: 
+           none
+           variant unifier:
+           SUBS1
+           SMT constraint:
+           {SMT1 : true}) 
+           printSolutions(({0, ITERM, none, 0, 0, 0, {SMT1 : true}, # SOLUTIONS1 # } ; NODES1), s(SCOUNTER)) .
+
+    eq printSolutions(({NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, 
+        ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : true}, # {SOLID, SUBS3} ; SOLUTIONS1 # } ; NODES1), SCOUNTER)
+        = (### Solution SCOUNTER ###
+           state: T1
+           accumulated substitution: 
+           ACSUBS1
+           variant unifier:
+           SUBS3
+           SMT constraint:
+           {SMT1 : true}) 
+           printSolutions(({NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, 
+                ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : true}, # SOLUTIONS1 # } ; NODES1), s(SCOUNTER)) .
+
+    eq printSolutions((NODE1 ; NODES1), SCOUNTER)
+        = printSolutions(NODES1, SCOUNTER) [owise] .
+        
+endfm

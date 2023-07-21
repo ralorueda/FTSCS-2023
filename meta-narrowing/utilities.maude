@@ -1,0 +1,450 @@
+load smt.maude
+
+--- Variable renaming and variable counters
+fmod CONVERT-VARIABLES is
+    protecting META-LEVEL .
+    protecting CONVERSION .
+    
+    sorts NeTermSet TermSet .
+    subsort Term < NeTermSet < TermSet .
+    
+    op mt : -> TermSet [ctor] .
+    op _;;_ : TermSet TermSet -> TermSet [assoc comm id: mt] .
+    op _;;_ : NeTermSet TermSet -> NeTermSet [assoc comm id: mt] .
+    eq T:Term ;; T:Term = T:Term .
+
+    var F : Qid .   var V : Variable .   var GT : GroundTerm .   var GNTL : NeGroundTermList .   var NTL : NeTermList .
+    var T : Term .   var N : Nat .   vars TL TL' TL'' : TermList .   vars SB SB' : Substitution .   var VarType : Type .
+    var TS : TermSet .   var M : Module .   var NTS : NeTermSet .   vars TLIST1 TLIST2 : TermList .   var CO : Context .
+    var NCTL : NeCTermList .   var C : Constant .   var GTL : GTermList .
+
+    op rename : TermSet Nat -> Substitution .
+    eq rename(mt, N) = none .
+    eq rename(V ;; TS, N) = V <- qid("$" + string(N,10) + ":" + string(getType(V))) ; rename(TS, N + 1) .
+
+    op getVars : GTermList -> TermSet .
+    eq getVars([]) = mt .
+    eq getVars(empty) = mt .
+    eq getVars(C) = mt .
+    eq getVars(V) = V .
+    eq getVars(F[NTL]) = getVars(NTL) .
+    eq getVars(F[NCTL]) = getVars(NCTL) .
+    eq getVars((T, NTL)) = getVars(T) ;; getVars(NTL) .
+    eq getVars((CO, NTL)) = getVars(NTL) .
+    eq getVars((T, NCTL)) = getVars(T) ;; getVars(NCTL) .
+
+    op getRangeVars : Substitution -> TermSet .
+    eq getRangeVars((none).Substitution) = mt .
+    eq getRangeVars(V <- T ; SB) = getVars(T) ;; getRangeVars(SB) .
+
+    op getVarsNumber : TermList -> Nat .
+    op getVarsNumber : TermSet -> Nat .
+    eq getVarsNumber(empty) = 0 .
+    eq getVarsNumber(mt) = 0 .
+    eq getVarsNumber(GT) = 0 .
+    eq getVarsNumber(V) = if (substr(string(V), 0, 1) == "$") then 1 else 0 fi .
+    eq getVarsNumber(F[NTL]) = getVarsNumber(NTL) .
+    eq getVarsNumber(T ;; NTS) = getVarsNumber(T) + getVarsNumber(NTS) .
+    eq getVarsNumber((T, NTL)) = getVarsNumber(T) + getVarsNumber(NTL) .
+    
+    op applySub : TermList Substitution -> TermList .
+    eq applySub([], SB) = [] .
+    eq applySub(V,(V <- T) ; SB) = T .
+    eq applySub(F[TL], SB) = F[applySub(TL, SB)] .
+    eq applySub((T,NTL),SB) = (applySub(T,SB), applySub(NTL,SB)) .
+    eq applySub((empty).TermList, SB) = (empty).TermList .
+    eq applySub(T,SB) = T [owise] .
+
+    op applySub : GTermList Substitution -> GTermList .
+    eq applySub([], SB) = [] .
+    eq applySub(F[NCTL], SB) = F[applySub(NCTL,SB)] .
+    eq applySub((CO, NTL), SB) = (applySub(CO,SB),applySub(NTL,SB)) .
+    eq applySub((T,NCTL), SB) = (applySub(T,SB),applySub(NCTL,SB)) .
+
+    op applySub : TermSet Substitution -> TermList .
+    eq applySub((mt).TermSet, SB) = (mt).TermList .
+    eq applySub(V ;; NTS, SB) = (applySub(V,SB), applySub(NTS,SB)) .
+
+    op applySub : Substitution Substitution -> Substitution .
+    eq applySub((none).Substitution,SB) = none .
+    eq applySub(V <- T ; SB,SB') =  V <- applySub(T,SB') ; applySub(SB,SB') .
+    
+    op reduceSub : Module Substitution -> Substitution .
+    eq reduceSub(M, (none).Substitution) = (none).Substitution .
+    eq reduceSub(M, V <- T ; SB) = V <- getTerm(metaReduce(M, T)) ; reduceSub(M, SB) .
+endfm
+
+
+--- Module conversion to handle conditional rules
+fmod CONVERT-MODULE is
+    protecting META-MODULE .
+    protecting META-LEVEL .
+    protecting META-TERM .
+    protecting REAL-INTEGER .
+    
+    var MOD : Qid .   var IL : ImportList .   var SS : SortSet .   var SUBSS : SubsortDeclSet .   
+    var OPS : OpDeclSet .   var MBS : MembAxSet .   var EQS EQS1 EQS2 : EquationSet .   vars RLS RLS1 RLS2 : RuleSet .   
+    var STTS : StratDeclSet .   var STTD : StratDefSet .   vars LHS RHS : Term . 
+    vars T1 T2 T3 : Term .   var ATTRS : AttrSet .   var KS : KindSet .   var SMT1 : Boolean .
+    vars COND1 COND2 : Condition .   var K : Kind .   vars TP V : Qid .   var BCOND1 BCOND2 : Term .
+    
+    op transformMod : Module -> Module .
+
+    eq transformMod(mod MOD is IL sorts SS . SUBSS OPS MBS EQS RLS endm)
+                = mod MOD is IL (protecting 'META-TERM .) sorts SS ; 'BoolT ; 'Success . SUBSS 
+                    (OPS 
+                        (op 'tt : nil -> 'BoolT [ctor] .)
+                        (op '_&_ : '`[BoolT`] '`[BoolT`] -> '`[BoolT`] [assoc comm id('tt.BoolT)] .)        
+                        (op '_=:=_ : 'Universal 'Universal -> '`[BoolT`] [ctor poly (1 2)] .)
+                        (op '_|_ : 'Universal '`[BoolT`] -> 'Universal [ctor poly (1 0)] .)
+                        (op 'success : nil -> 'Success [ctor] .)
+                        (op '_&_ : '`[Success`] '`[Success`] -> '`[Success`] [assoc comm id('success.Success)] .)
+                        (op '_=>>_ : '`[Success`] 'Universal -> 'Universal [ctor frozen(2) strat(1 0) poly(2 0)] .)
+                        (op '_==:==_ : 'Universal 'Universal -> '`[Success`] [ctor poly(1 2)] .)
+                        (op '_>>_ : 'Boolean 'Universal -> 'Universal [ctor poly (2 0)] .)
+                    )
+                    MBS 
+                    transformEqs(addEqs(EQS, getKinds(mod MOD is IL sorts SS ; 'BoolT ; 'Success . SUBSS OPS MBS EQS RLS endm)))
+                    transformRules(RLS) endm .
+
+    eq transformMod(th MOD is IL sorts SS . SUBSS OPS MBS EQS RLS endth)
+                = th MOD is IL (protecting 'META-TERM .) sorts SS ; 'BoolT ; 'Success . SUBSS 
+                    (OPS 
+                        (op 'tt : nil -> 'BoolT [ctor] .)
+                        (op '_&_ : '`[BoolT`] '`[BoolT`] -> '`[BoolT`] [assoc comm id('tt.BoolT)] .)        
+                        (op '_=:=_ : 'Universal 'Universal -> '`[BoolT`] [ctor poly (1 2)] .)
+                        (op '_|_ : 'Universal '`[BoolT`] -> 'Universal [ctor poly (1 0)] .)
+                        (op 'success : nil -> 'Success [ctor] .)
+                        (op '_&_ : '`[Success`] '`[Success`] -> '`[Success`] [assoc comm id('success.Success)] .)
+                        (op '_=>>_ : '`[Success`] 'Universal -> 'Universal [ctor frozen(2) strat(1 0) poly(2 0)] .)
+                        (op '_==:==_ : 'Universal 'Universal -> '`[Success`] [ctor poly(1 2)] .)
+                        (op '_>>_ : 'Boolean 'Universal -> 'Universal [ctor poly (2 0)] .)
+                    )
+                    MBS
+                    transformEqs(addEqs(EQS, getKinds(mod MOD is IL sorts SS ; 'BoolT ; 'Success . SUBSS OPS MBS EQS RLS endm)))
+                    transformRules(RLS) endth . 
+
+    eq transformMod(smod MOD is IL sorts SS . SUBSS OPS MBS EQS RLS STTS STTD endsm)
+                = smod MOD is IL (protecting 'META-TERM .) sorts SS ; 'BoolT ; 'Success . SUBSS 
+                    (OPS 
+                        (op 'tt : nil -> 'BoolT [ctor] .)
+                        (op '_&_ : '`[BoolT`] '`[BoolT`] -> '`[BoolT`] [assoc comm id('tt.BoolT)] .)        
+                        (op '_=:=_ : 'Universal 'Universal -> '`[BoolT`] [ctor poly (1 2)] .)
+                        (op '_|_ : 'Universal '`[BoolT`] -> 'Universal [ctor poly (1 0)] .)
+                        (op 'success : nil -> 'Success [ctor] .)
+                        (op '_&_ : '`[Success`] '`[Success`] -> '`[Success`] [assoc comm id('success.Success)] .)
+                        (op '_=>>_ : '`[Success`] 'Universal -> 'Universal [ctor frozen(2) strat(1 0) poly(2 0)] .)
+                        (op '_==:==_ : 'Universal 'Universal -> '`[Success`] [ctor poly(1 2)] .)
+                        (op '_>>_ : 'Boolean 'Universal -> 'Universal [ctor poly (2 0)] .)
+                    )
+                    MBS
+                    transformEqs(addEqs(EQS, getKinds(mod MOD is IL sorts SS ; 'BoolT ; 'Success . SUBSS OPS MBS EQS RLS endm)))
+                    transformRules(RLS) STTS STTD endsm .
+
+    eq transformMod(sth MOD is IL sorts SS . SUBSS OPS MBS EQS RLS STTS STTD endsth)
+                = sth MOD is IL (protecting 'META-TERM .) sorts SS ; 'BoolT ; 'Success . SUBSS 
+                    (OPS 
+                        (op 'tt : nil -> 'BoolT [ctor] .)
+                        (op '_&_ : '`[BoolT`] '`[BoolT`] -> '`[BoolT`] [assoc comm id('tt.BoolT)] .)        
+                        (op '_=:=_ : 'Universal 'Universal -> '`[BoolT`] [ctor poly (1 2)] .)
+                        (op '_|_ : 'Universal '`[BoolT`] -> 'Universal [ctor poly (1 0)] .)
+                        (op 'success : nil -> 'Success [ctor] .)
+                        (op '_&_ : '`[Success`] '`[Success`] -> '`[Success`] [assoc comm id('success.Success)] .)
+                        (op '_=>>_ : '`[Success`] 'Universal -> 'Universal [ctor frozen(2) strat(1 0) poly(2 0)] .)
+                        (op '_==:==_ : 'Universal 'Universal -> '`[Success`] [ctor poly(1 2)] .)
+                        (op '_>>_ : 'Boolean 'Universal -> 'Universal [ctor poly (2 0)] .)
+                    )
+                    MBS
+                    transformEqs(addEqs(EQS, getKinds(mod MOD is IL sorts SS ; 'BoolT ; 'Success . SUBSS OPS MBS EQS RLS endm)))
+                    transformRules(RLS) STTS STTD endsth .
+
+    op addEqs : EquationSet KindSet -> EquationSet .    
+    eq addEqs(EQS, K ; KS)
+                = addEqs(
+                    (EQS
+                    eq '_=:=_[addTypeToVar(K,'X), addTypeToVar(K,'X)] = 'tt.BoolT [variant] .
+                    eq '_|_[addTypeToVar(K,'X), 'tt.BoolT] = addTypeToVar(K,'X) [variant] .
+                    eq '_=>>_['success.Success, addTypeToVar(K,'X)] = addTypeToVar(K,'X) [variant] .
+                    eq '_==:==_[addTypeToVar(K,'X), addTypeToVar(K,'X)] = 'success.Success [variant] .),
+                    KS) .
+    eq addEqs(EQS, KS) = EQS [owise] .
+
+    op addTypeToVar : Type Qid -> Variable [memo] .
+    eq addTypeToVar(TP, V)
+                = qid(string(V) + ":" + string(TP)) .
+
+    op transformEqs : EquationSet -> EquationSet .
+    eq transformEqs(EQS) = transformVariantConditions(EQS) .
+
+    op transformVariantConditions : EquationSet -> EquationSet .
+    eq transformVariantConditions(EQS1 (ceq LHS = RHS if nil [ATTRS] .) EQS2)
+                = transformVariantConditions(EQS1 EQS2) (eq LHS = RHS [ATTRS variant] .) .
+    eq transformVariantConditions(EQS1 (ceq LHS = RHS if COND1 /\ (T1 = T2) /\ COND2 [ATTRS] .) EQS2)
+                = transformVariantConditions(EQS1 EQS2) transformVariantConditionsAux(ceq LHS = '_|_[RHS,'_=:=_[T1,T2]] if COND1 /\ COND2 [ATTRS] .) .          
+    eq transformVariantConditions(EQS1) = EQS1 [owise] .
+
+    op transformVariantConditionsAux : Equation -> Equation .
+    eq transformVariantConditionsAux(ceq LHS = RHS if nil [ATTRS] .)
+                =  (eq (LHS) = RHS [ATTRS variant] .) .
+    eq transformVariantConditionsAux(ceq '_|_[LHS,T1] = RHS if COND1 /\ (T2 = T3) /\ COND2 [ATTRS] .)
+                = transformVariantConditionsAux(ceq LHS = '_|_[RHS,'_&_[T1,'_=:=_[T2,T3]]] if COND1 /\ COND2 [ATTRS] .) .
+
+    op transformRules : RuleSet -> RuleSet .
+    eq transformRules(RLS) = transformVariantConditions(transformSMTConditions(transformReachabilityConditions(RLS))) .
+
+    op transformReachabilityConditions : RuleSet -> RuleSet .
+    eq transformReachabilityConditions(RLS1 (crl LHS => RHS if nil [ATTRS] .) RLS2)
+                = transformReachabilityConditions(RLS1 RLS2) (rl LHS => RHS [ATTRS narrowing] .) .
+    eq transformReachabilityConditions(RLS1 (crl LHS => RHS if COND1 /\ (T1 => T2) /\ COND2 [ATTRS] .) RLS2)
+                = transformReachabilityConditions(RLS1 RLS2) transformReachabilityConditionsAux(crl LHS => '_=>>_['_==:==_[T1,T2],RHS] if COND1 /\ COND2 [ATTRS] .) .           
+    eq transformReachabilityConditions(RLS1) = RLS1 [owise] .
+
+    op transformReachabilityConditionsAux : Rule -> Rule .
+    eq transformReachabilityConditionsAux(crl (LHS) => RHS if nil [ATTRS] .)
+                =  (rl (LHS) => RHS [ATTRS narrowing] .) .
+    eq transformReachabilityConditionsAux(crl LHS => '_=>>_[T1,RHS] if COND1 /\ (T2 => T3) /\ COND2 [ATTRS] .)
+                = transformReachabilityConditionsAux(crl LHS => '_=>>_['_&_[T1,'_==:==_[T2,T3]],RHS] if COND1 /\ COND2 [ATTRS] .) .
+    eq transformReachabilityConditionsAux(crl LHS => RHS if COND1 [ATTRS] .)
+                = (crl LHS => RHS if COND1 [ATTRS] .) [owise] .
+
+    op transformSMTConditions : RuleSet -> RuleSet .
+    eq transformSMTConditions(RLS1 (crl LHS => RHS if nil [ATTRS] .) RLS2)
+                = transformSMTConditions(RLS1 RLS2) (rl LHS => RHS [ATTRS narrowing] .) .
+    eq transformSMTConditions(RLS1 (crl LHS => RHS if COND1 /\ (BCOND1 = 'true.Boolean) /\ COND2 [ATTRS] .) RLS2)
+                = transformSMTConditions(RLS1 transformSMTConditionsAux(crl LHS => '_>>_[BCOND1,RHS] if COND1 /\ COND2 [ATTRS] .) RLS2) .
+    eq transformSMTConditions(RLS1 (crl LHS => RHS if COND1 /\ (BCOND1 = 'false.Boolean) /\ COND2 [ATTRS] .) RLS2)
+                = transformSMTConditions(RLS1 transformSMTConditionsAux(crl LHS => '_>>_['not_[BCOND1],RHS] if COND1 /\ COND2 [ATTRS] .) RLS2) .
+    eq transformSMTConditions(RLS1) = RLS1 [owise] .
+
+    op transformSMTConditionsAux : Rule -> Rule .
+    eq transformSMTConditionsAux(crl LHS => RHS if nil [ATTRS] .)
+                =  (rl (LHS) => RHS [ATTRS narrowing] .) .
+    eq transformSMTConditionsAux(crl LHS => '_>>_[BCOND1,RHS] if COND1 /\ (BCOND2 = 'true.Boolean) /\ COND2 [ATTRS] .)
+                = transformSMTConditionsAux(crl LHS => '_>>_['_and_[BCOND1,BCOND2],RHS] if COND1 /\ COND2 [ATTRS] .) .
+    eq transformSMTConditionsAux(crl LHS => '_>>_[BCOND1,RHS] if COND1 /\ (BCOND2 = 'false.Boolean) /\ COND2 [ATTRS] .)
+                = transformSMTConditionsAux(crl LHS => '_>>_['_and_[BCOND1,'not_[BCOND2]],RHS] if COND1 /\ COND2 [ATTRS] .) .
+    eq transformSMTConditionsAux(crl LHS => RHS if COND1 [ATTRS] .)
+                = (crl LHS => RHS if COND1 [ATTRS] .) [owise] .
+
+    op transformVariantConditions : RuleSet -> RuleSet .
+    eq transformVariantConditions(RLS1 (crl LHS => RHS if nil [ATTRS] .) RLS2)
+                = transformVariantConditions(RLS1 RLS2) (rl LHS => RHS [ATTRS narrowing] .) .
+    eq transformVariantConditions(RLS1 (crl LHS => RHS if COND1 /\ (T1 = T2) /\ COND2 [ATTRS] .) RLS2)
+                = transformVariantConditions(RLS1 RLS2) transformVariantConditionsAux(crl '_|_[LHS,'_=:=_[T1,T2]] => RHS if COND1 /\ COND2 [ATTRS] .) .          
+    eq transformVariantConditions(RLS1) = RLS1 [owise] .
+
+    op transformVariantConditionsAux : Rule -> Rule .
+    eq transformVariantConditionsAux(crl LHS => RHS if nil [ATTRS] .)
+                =  (rl (LHS) => RHS [ATTRS narrowing] .) .
+    eq transformVariantConditionsAux(crl '_|_[LHS,T1] => RHS if COND1 /\ (T2 = T3) /\ COND2 [ATTRS] .)
+                = transformVariantConditionsAux(crl '_|_[LHS,'_&_[T1,'_=:=_[T2,T3]]] => RHS if COND1 /\ COND2 [ATTRS] .) .
+    eq transformVariantConditionsAux(crl LHS => RHS if COND1 [ATTRS] .)
+                = (crl LHS => RHS if COND1 [ATTRS] .) [owise] .
+endfm
+
+
+--- Sorts, subsorts, operators...
+fmod COMMON-NARROWING is
+    protecting META-LEVEL .
+    protecting CONVERT-VARIABLES .
+    protecting CONVERT-MODULE .
+
+    --- Algorithms
+    sort Algorithm .
+    ops std can std-smt can-smt fstd fcan fstd-smt fcan-smt : -> Algorithm .
+
+    --- Declaration of auxiliary sorts
+    sorts NzBound Bounds Counters SearchType NarrowingProblem .
+    subsort NzBound < Bound .
+    subsort NzNat < NzBound .
+
+    --- Declaration of nodes
+    sorts Nodes Node NarrowingResult .
+    subsort Node < Nodes .
+    subsort NarrowingApplyResult? < NarrowingResult .
+
+    --- Max solutions, max depth
+    op _,_ : Bound Bound -> Bounds .
+    op unbounded : -> NzBound [ctor] .
+
+    --- Nodes, variables, solutions
+    op _,_,_ : Nat Nat Nat -> Counters .
+
+    --- Search arrows
+    ops =>1 =>+ =>* =>! : -> SearchType .
+
+    --- A narrowing problem (Initial term, arrow, target term)
+    op _ _ _ : Term SearchType Term -> NarrowingProblem .
+
+    --- NODE (standard): Id, metaNarrowingApply output, branch, depth, parent id, narrowing solutions
+    op {_,_,_,_,_,_,#_#} : Nat NarrowingResult Substitution Nat Nat Nat Solutions -> Node .
+    op {_,_,_,_,_,_,#_#} : Nat Term Substitution Nat Nat Nat Solutions -> Node .
+    --- NODE (standard smt): Id, metaNarrowingApply output, branch, depth, parent id, local smt constraint, narrowing solutions
+    op {_,_,_,_,_,_,_,#_#} : Nat NarrowingResult Substitution Nat Nat Nat SMTConstraint Solutions -> Node .
+    op {_,_,_,_,_,_,_,#_#} : Nat Term Substitution Nat Nat Nat SMTConstraint Solutions -> Node .
+    --- NODE (canonical): Id, metaNarrowingApply output, irreducible terms, branch, depth, parent id, narrowing solutions
+    op {_,_,_,_,_,_,_,#_#} : Nat NarrowingResult Substitution TermList Nat Nat Nat Solutions -> Node .
+    op {_,_,_,_,_,_,_,#_#} : Nat Term Substitution TermList Nat Nat Nat Solutions -> Node .
+    --- NODE (canonical smt): Id, metaNarrowingApply output, irreducible terms, branch, depth, parent id, local smt constraint, narrowing solutions
+    op {_,_,_,_,_,_,_,_,#_#} : Nat NarrowingResult Substitution TermList Nat Nat Nat SMTConstraint Solutions -> Node .
+    op {_,_,_,_,_,_,_,_,#_#} : Nat Term Substitution TermList Nat Nat Nat SMTConstraint Solutions -> Node .
+
+    sort FoldingId .
+    subsort Nat < FoldingId .
+    op unfolded : -> FoldingId .
+
+    --- NODE (folding standard): Id, metaNarrowingApply output, branch, depth, parent id, folding id, narrowing solutions
+    op {_,_,_,_,_,_,_,#_#} : Nat NarrowingResult Substitution Nat Nat Nat FoldingId Solutions -> Node . --- (folding standard)
+    op {_,_,_,_,_,_,_,#_#} : Nat Term Substitution Nat Nat Nat FoldingId Solutions -> Node . --- (folding standard)
+    --- NODE (standard smt): Id, metaNarrowingApply output, branch, depth, parent id, folding id, local smt constraint, narrowing solutions
+    op {_,_,_,_,_,_,_,_,#_#} : Nat NarrowingResult Substitution Nat Nat Nat SMTConstraint FoldingId Solutions -> Node .
+    op {_,_,_,_,_,_,_,_,#_#} : Nat Term Substitution Nat Nat Nat SMTConstraint FoldingId Solutions -> Node .
+    --- NODE (folding canonical): Id, metaNarrowingApply output, irreducible terms, branch, depth, parent id, folding id, narrowing solutions
+    op {_,_,_,_,_,_,_,_,#_#} : Nat NarrowingResult Substitution TermList Nat Nat Nat FoldingId Solutions -> Node .
+    op {_,_,_,_,_,_,_,_,#_#} : Nat Term Substitution TermList Nat Nat Nat FoldingId Solutions -> Node .
+    --- NODE (canonical smt): Id, metaNarrowingApply output, irreducible terms, branch, depth, parent id, local smt constraint, folding id, narrowing solutions
+    op {_,_,_,_,_,_,_,_,_,#_#} : Nat NarrowingResult Substitution TermList Nat Nat Nat SMTConstraint FoldingId Solutions -> Node .
+    op {_,_,_,_,_,_,_,_,_,#_#} : Nat Term Substitution TermList Nat Nat Nat SMTConstraint FoldingId Solutions -> Node .
+
+    op empty : -> Nodes .
+    op _;_ : Nodes Nodes -> Nodes [assoc id: empty] .  
+
+    --- Main sorts and operators (standard)
+    sorts NarrowingInfo .
+
+    op _ narrowing `[_] in _: _ _ _ : VariantOptionSet Bounds Module Term SearchType Term -> NarrowingOutput .
+    op narrowing `[_] in _: _ _ _ : Bounds Module Term SearchType Term -> NarrowingOutput .
+    op {_,_,_,(_),<_>,|_|,[_],[_]} : Algorithm Module NarrowingProblem VariantOptionSet Bounds Counters Nodes Nodes -> NarrowingInfo .
+    op noSolutions : -> NarrowingInfo .
+
+    --- Main sorts and operators (canonical)
+    op _ canonical narrowing `[_] in _: _ _ _ with irreducible:_ : VariantOptionSet Bounds Module Term SearchType Term TermList -> NarrowingOutput .
+    op canonical narrowing `[_] in _: _ _ _ with irreducible:_ : Bounds Module Term SearchType Term TermList -> NarrowingOutput .
+    op {_,_,_,_,(_),<_>,|_|,[_],[_]} : Algorithm Module NarrowingProblem TermList VariantOptionSet Bounds Counters Nodes Nodes -> NarrowingInfo .
+
+    --- SMT flags
+    sorts SMTFlag FinalSMTFlag .
+    subsort FinalSMTFlag < SMTFlag .
+    op none : -> SMTFlag .
+    op no check : -> FinalSMTFlag .
+    op final check : -> FinalSMTFlag .
+
+    --- Main sorts and operators (standard smt)
+    op _ smt narrowing `[_] in _: _ _ _ with condition:_ : VariantOptionSet Bounds Module Term SearchType Term Term -> NarrowingOutput .
+    op _ smt _ narrowing `[_] in _: _ _ _ with condition:_ : VariantOptionSet SMTFlag Bounds Module Term SearchType Term Term -> NarrowingOutput .
+    op smt narrowing `[_] in _: _ _ _ with condition:_ : Bounds Module Term SearchType Term Term -> NarrowingOutput .
+    op smt _ narrowing `[_] in _: _ _ _ with condition:_ : SMTFlag Bounds Module Term SearchType Term Term -> NarrowingOutput .
+    op {_,_,_,{_,_},(_),<_>,|_|,[_],[_]} : Algorithm Module NarrowingProblem SMTFlag Term VariantOptionSet Bounds Counters Nodes Nodes -> NarrowingInfo .
+
+    --- Main sorts and operators (canonical smt)
+    op _ smt canonical narrowing `[_] in _: _ _ _ with irreducible:_ and condition:_ : VariantOptionSet Bounds Module Term SearchType Term TermList Term -> NarrowingOutput .
+    op _ smt _ canonical narrowing `[_] in _: _ _ _ with irreducible:_ and condition:_ : VariantOptionSet SMTFlag Bounds Module Term SearchType Term TermList Term -> NarrowingOutput .
+    op smt canonical narrowing `[_] in _: _ _ _ with irreducible:_ and condition:_ : Bounds Module Term SearchType Term TermList Term -> NarrowingOutput .
+    op smt _ canonical narrowing `[_] in _: _ _ _ with irreducible:_ and condition:_ : SMTFlag Bounds Module Term SearchType Term TermList Term -> NarrowingOutput .
+    op {_,_,_,_,{_,_},(_),<_>,|_|,[_],[_]} : Algorithm Module NarrowingProblem TermList SMTFlag Term VariantOptionSet Bounds Counters Nodes Nodes -> NarrowingInfo .
+
+    --- Main sorts and operators (folding standard)
+    op _ fnarrowing `[_] in _: _ _ _ : VariantOptionSet Bounds Module Term SearchType Term -> NarrowingOutput .
+    op fnarrowing `[_] in _: _ _ _ : Bounds Module Term SearchType Term -> NarrowingOutput .
+
+    --- Main sorts and operators (folding canonical)
+    op _ canonical fnarrowing `[_] in _: _ _ _ with irreducible:_ : VariantOptionSet Bounds Module Term SearchType Term TermList -> NarrowingOutput .
+    op canonical fnarrowing `[_] in _: _ _ _ with irreducible:_ : Bounds Module Term SearchType Term TermList -> NarrowingOutput .
+
+    --- Main sorts and operators (standard smt)
+    op _ smt fnarrowing `[_] in _: _ _ _ with condition:_ : VariantOptionSet Bounds Module Term SearchType Term Term -> NarrowingOutput .
+    op _ smt _ fnarrowing `[_] in _: _ _ _ with condition:_ : VariantOptionSet SMTFlag Bounds Module Term SearchType Term Term -> NarrowingOutput .
+    op smt fnarrowing `[_] in _: _ _ _ with condition:_ : Bounds Module Term SearchType Term Term -> NarrowingOutput .
+    op smt _ fnarrowing `[_] in _: _ _ _ with condition:_ : SMTFlag Bounds Module Term SearchType Term Term -> NarrowingOutput .
+    
+    --- Main sorts and operators (canonical smt)
+    op _ smt canonical fnarrowing `[_] in _: _ _ _ with irreducible:_ and condition:_ : VariantOptionSet Bounds Module Term SearchType Term TermList Term -> NarrowingOutput .
+    op _ smt _ canonical fnarrowing `[_] in _: _ _ _ with irreducible:_ and condition:_ : VariantOptionSet SMTFlag Bounds Module Term SearchType Term TermList Term -> NarrowingOutput .
+    op smt canonical fnarrowing `[_] in _: _ _ _ with irreducible:_ and condition:_ : Bounds Module Term SearchType Term TermList Term -> NarrowingOutput .
+    op smt _ canonical fnarrowing `[_] in _: _ _ _ with irreducible:_ and condition:_ : SMTFlag Bounds Module Term SearchType Term TermList Term -> NarrowingOutput .
+    
+    --- Solutions sorts and operators
+    sort Solution Solutions .
+    subsorts UnificationPair < Solution < Solutions .
+
+    op {_,_} : Nat Substitution -> Solution .
+    op noSolution : -> Solutions .
+    op _;_ : Solutions Solutions -> Solutions [assoc id: noSolution] .
+
+    --- SMT constraints
+    sort SMTConstraint .
+    op {_:_} : Term Bool -> SMTConstraint .
+
+    --- Steps operators
+    op findSolutions : Module UnificationProblem VariantOptionSet TermList Nat -> Solutions . 
+    op initialTermSolutions : NarrowingInfo -> NarrowingOutput .
+    op generateNode : NarrowingInfo -> NarrowingOutput .
+    op rNode : Node -> Node .
+    op renameVars : NarrowingInfo -> NarrowingOutput .
+    op unifyTerms : NarrowingInfo -> NarrowingOutput .
+    op termSolutions : NarrowingInfo -> NarrowingOutput .
+    op checkSMT : NarrowingInfo -> NarrowingOutput .
+    op finalCheckSMT : Module Nodes -> Nodes .
+    op checkFolding : NarrowingInfo -> NarrowingOutput .
+    op checkIfFolds(_|_|_) : NarrowingInfo Node Nodes -> NarrowingInfo .
+    op checkPreviousFolds(_|_|_) : NarrowingInfo Node Nodes -> NarrowingInfo .
+    op checkFoldingConditions(_,_,{_,_},{_,_},_) : Module TermList Term Term Term Term Nat -> Bool .
+    op removeChildren : Nat Nodes -> Nodes .
+    
+    
+    --- Output sorts and operators
+    sorts NarrowingOutput ParsedSolution ParsedSolutions .
+    subsort Nodes < ParsedSolution < ParsedSolutions < NarrowingOutput .
+
+    op toString(_) : NarrowingInfo -> NarrowingOutput .
+    op _,_,_,(_),<_>,|_|,[_],[_] : Algorithm Module NarrowingProblem VariantOptionSet Bounds Counters Nodes Nodes -> NarrowingOutput . --- standard
+    op _,_,_,_,(_),<_>,|_|,[_],[_] : Algorithm Module NarrowingProblem TermList VariantOptionSet Bounds Counters Nodes Nodes -> NarrowingOutput . --- canonical
+    op _,_,_,{_,_},(_),<_>,|_|,[_],[_] : Algorithm Module NarrowingProblem SMTFlag Term VariantOptionSet Bounds Counters Nodes Nodes -> NarrowingOutput . --- standard smt
+    op _,_,_,_,{_,_},(_),<_>,|_|,[_],[_] : Algorithm Module NarrowingProblem TermList SMTFlag Term VariantOptionSet Bounds Counters Nodes Nodes -> NarrowingOutput . --- canonical smt
+    op No solutions found : -> NarrowingOutput [format(n s s d)] .
+    op empty : -> ParsedSolutions .
+    
+    --- User readable output operators
+    op __ : ParsedSolutions ParsedSolutions -> ParsedSolutions [assoc id: empty format(n d d)] .
+    op printSolutions : Nodes Nat -> ParsedSolutions .
+    op ### Node _ ### state:_rule:_accumulated substitution:_variant unifier:_parent id:_folded?:_SMT constraint:_solutions:_ : Nat Term Qid Substitution Substitution Nat FoldingId Term Solutions
+            -> ParsedSolution [format(n s s s n n n n n s d n s d n s n n n n s n n n n)]   .
+    op ### Solution _ ### state:_accumulated substitution:_variant unifier:_ : Nat Term Substitution Substitution 
+            -> ParsedSolution [format(nn s s s n n n d d n d d d)] . --- standard
+    op ### Solution _ ### state:_accumulated substitution:_variant unifier:_irreducible terms:_ : Nat Term Substitution Substitution TermList 
+            -> ParsedSolution [format(nn s s s n n n d d n d d n d n d)] . --- canonical
+    op ### Solution _ ### state:_accumulated substitution:_variant unifier:_SMT constraint:_ : Nat Term Substitution Substitution SMTConstraint 
+            -> ParsedSolution [format(nn s s s n n n d d n d d n d n d)] . ---- standard smt
+    op ### Solution _ ### state:_accumulated substitution:_variant unifier:_irreducible terms:_SMT constraint:_ : Nat Term Substitution Substitution TermList SMTConstraint 
+            -> ParsedSolution [format(nn s s s n n n d d n d d n d n n d n d)] . ---- canonical smt
+
+    --- Interface readable output operators
+    op _,_ : ParsedSolutions ParsedSolutions -> ParsedSolutions [assoc id: empty format(n d d d)] . 
+    op {_,_,_,_,_} : Term Substitution Substitution TermList TermList -> ParsedSolution [ctor] .
+    op printSolutions : Nodes -> ParsedSolutions .
+    
+    --- From now on: operators with a common behaviour
+    var MOD : Module .   var RLABEL1 : Qid .   var SUBS1 : Substitution .   vars RHS LHS : Term .
+    var ATTRS : AttrSet .   var T1 T2 : Term .   var F : Qid .   vars TLIST1 TLIST2 TLIST3 : TermList .
+    var RLS : RuleSet .   var SMT1 : Boolean .   var NeCTLIST1 : NeCTermList .   var CTX1 : Context .
+
+    --- Introduce a term into a given context
+    vars T T' : Term .   var CO : Context .   var TL : TermList .   var NCTL : NeCTermList .
+
+    --- Add new irreducible terms to the list depending on the rule used
+    op getIrreducibilityTerm : Module Qid Substitution -> Term .
+    eq getIrreducibilityTerm(MOD, RLABEL1, SUBS1) 
+        = getTerm(metaReduce(MOD, applySub(getLhs(getRls(MOD), RLABEL1), SUBS1))) .
+
+    --- Get the left hand-side of a rule
+    op getLhs : RuleSet Qid -> Term .
+    eq getLhs(RLS (rl LHS => RHS [ATTRS label(RLABEL1)] .), RLABEL1) 
+        = LHS .
+endfm
+
+
+fmod NARROWING-UTILITIES is
+    protecting CONVERT-VARIABLES .
+    protecting COMMON-NARROWING .
+    protecting CONVERT-MODULE .
+endfm

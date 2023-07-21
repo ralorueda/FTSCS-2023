@@ -1,0 +1,76 @@
+		     \||||||||||||||||||/
+		   --- Welcome to Maude ---
+		     /||||||||||||||||||\
+	    Maude 3.3.1 built: Apr 13 2023 16:10:31
+	     Copyright 1997-2023 SRI International
+		   Sat Jul 22 00:39:29 2023
+==========================================
+reduce in EXECUTE-MOD : smt canonical fnarrowing[unbounded,unbounded]in
+    upModule('PTA-VENDING-COFFEE, false) : upTerm([idle : X1:Real ; X2:Real]<
+    P1:Real ; P2:Real ; P3:Real > < M:Money ; C:CNat >) =>* upTerm(< done :
+    X1':Real ; X2':Real > < P1:Real ; P2:Real ; P3:Real > < $ $ M':Money ; 1 +
+    1 + 1 + C:CNat >) with irreducible: empty and condition: upTerm(X1:Real ===
+    X2:Real and X1:Real >= (0/1).Real and P1:Real >= (0/1).Real and P2:Real >=
+    (0/1).Real and P3:Real >= (0/1).Real) .
+rewrites: 8798 in 12ms cpu (12ms real) (733166 rewrites/second)
+result ParsedSolution: 
+
+### Solution 1 ###
+state:
+'<_:_;_>`<_;_;_>`<_;_>['done.Location,'$80:Real,'$72:Real,'$75:Real,'$76:Real,
+    '$77:Real,'$78:Money,'_+_['1.CNat,'$79:CNat]]
+accumulated substitution: 
+  'C:CNat <- '_+_['1.CNat,'$79:CNat] ; 
+  'M:Money <- '__['q.Coin,'q.Coin,'q.Coin,'$78:Money] ; 
+  'P1:Real <- '$75:Real ; 
+  'P2:Real <- '$76:Real ; 
+  'P3:Real <- '$77:Real ; 
+  'X1:Real <- '$2:Real ; 
+  'X2:Real <- '$3:Real
+variant unifier: 
+  '$72:Real <- '@2:Real ; 
+  '$75:Real <- '@3:Real ; 
+  '$76:Real <- '@4:Real ; 
+  '$77:Real <- '@5:Real ; 
+  '$78:Money <- '__['$.Coin,'$.Coin,'@6:Money] ; 
+  '$79:CNat <- '_+_['1.CNat,'1.CNat,'@7:CNat] ; 
+  '$80:Real <- '@1:Real ; 
+  'C:CNat <- '@7:CNat ; 
+  'M':Money <- '@6:Money ; 
+  'P1:Real <- '@3:Real ; 
+  'P2:Real <- '@4:Real ; 
+  'P3:Real <- '@5:Real ; 
+  'X1':Real <- '@1:Real ; 
+  'X2':Real <- '@2:Real
+irreducible terms:
+'`[_:_;_`]<_;_;_>`<_;_>['idle.Location,'$2:Real,'$3:Real,'$4:Real,'$5:Real,
+    '$6:Real,'$7:Money,'$8:CNat],'<_:_;_>`<_;_;_>`<_;_>['idle.Location,
+    '$12:Real,'$13:Real,'$14:Real,'$15:Real,'$16:Real,'__['q.Coin,'q.Coin,
+    'q.Coin,'$11:Money],'$17:CNat],'`[_:_;_`]<_;_;_>`<_;_>['addSugar.Location,
+    '$30:Real,'$31:Real,'$32:Real,'$33:Real,'$34:Real,'$35:Money,'$36:CNat],
+    '<_:_;_>`<_;_;_>`<_;_>['addSugar.Location,'$39:Real,'$40:Real,'$41:Real,
+    '$42:Real,'$43:Real,'$44:Money,'$45:CNat],'`[_:_;_`]<_;_;_>`<_;_>[
+    'preparingCoffee.Location,'$55:Real,'$56:Real,'$57:Real,'$58:Real,
+    '$59:Real,'$60:Money,'$61:CNat],'<_:_;_>`<_;_;_>`<_;_>[
+    'preparingCoffee.Location,'$65:Real,'$66:Real,'$67:Real,'$68:Real,
+    '$69:Real,'$70:Money,'_+_['1.CNat,'$64:CNat]],'`[_:_;_`]<_;_;_>`<_;_>[
+    'done.Location,'$73:Real,'$74:Real,'$75:Real,'$76:Real,'$77:Real,
+    '$78:Money,'_+_['1.CNat,'$79:CNat]]
+SMT constraint:
+{'_and_['_and_['_and_['_and_['_===_['$80:Real,'_+_['$73:Real,'$81:Real]],
+    '_===_['$72:Real,'_+_['$74:Real,'$81:Real]]],'_<=_['$80:Real,'10/1.Real]],
+    '_>=_['$81:Real,'0/1.Real]],'_and_['_and_['_and_['_===_['$73:Real,
+    '0/1.Real],'_===_['$74:Real,'$77:Real]],'_<=_['$73:Real,'10/1.Real]],
+    '_and_['_and_['_and_['_and_['_===_['$65:Real,'_+_['$55:Real,'$63:Real]],
+    '_===_['$74:Real,'_+_['$56:Real,'$63:Real]]],'_<=_['$74:Real,'$77:Real]],
+    '_>=_['$63:Real,'0/1.Real]],'_and_['_and_['_===_['$56:Real,'$76:Real],
+    '_<=_['$56:Real,'$77:Real]],'_and_['_and_['_and_['_and_['_===_['$55:Real,
+    '_+_['$30:Real,'$38:Real]],'_===_['$56:Real,'_+_['$31:Real,'$38:Real]]],
+    '_<=_['$56:Real,'$76:Real]],'_>=_['$38:Real,'0/1.Real]],'_and_['_and_[
+    '_and_['_===_['$30:Real,'0/1.Real],'_===_['$31:Real,'0/1.Real]],'_<=_[
+    '$31:Real,'$76:Real]],'_and_['_and_['_and_['_===_['$12:Real,'_+_['$2:Real,
+    '$10:Real]],'_===_['$13:Real,'_+_['$3:Real,'$10:Real]]],'_>=_['$10:Real,
+    '0/1.Real]],'_and_['_and_['_and_['_and_['_===_['$2:Real,'$3:Real],'_>=_[
+    '$2:Real,'0/1.Real]],'_>=_['$75:Real,'0/1.Real]],'_>=_['$76:Real,
+    '0/1.Real]],'_>=_['$77:Real,'0/1.Real]]]]]]]]] : true}
+Bye.

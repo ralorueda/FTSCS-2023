@@ -1,0 +1,65 @@
+load narrowing-algorithms/standard.maude
+load narrowing-algorithms/canonical.maude
+load narrowing-algorithms/standard-smt.maude
+load narrowing-algorithms/canonical-smt.maude
+load narrowing-algorithms/folding-standard.maude
+load narrowing-algorithms/folding-canonical.maude
+load narrowing-algorithms/folding-standard-smt.maude
+load narrowing-algorithms/folding-canonical-smt.maude
+
+fmod NARROWING is
+    protecting STANDARD-NARROWING .
+    protecting CANONICAL-NARROWING .
+    protecting STANDARD-SMT-NARROWING .
+    protecting CANONICAL-SMT-NARROWING .
+    protecting FOLDING-STANDARD-NARROWING .
+    protecting FOLDING-CANONICAL-NARROWING .
+    protecting FOLDING-STANDARD-SMT-NARROWING .
+    protecting FOLDING-CANONICAL-SMT-NARROWING .
+
+
+    var M : Module .   vars T1 T2 : Term .   var ARROW : SearchType .   vars CANONICAL FOLDING FILTER : Bool .
+    var IRRED : TermList .   var SMT : TermList .   var NSOL DEPTH : Bound .   var VOPTIONS : VariantOptionSet .
+    var NESMT : NeTermList .
+
+    op narrowing : Module Term SearchType Term Bool Bool Bool Bool TermList TermList Bound Bound -> ParsedSolutions .
+
+    eq narrowing(M, T1, ARROW, T2, CANONICAL, FOLDING, false, false, IRRED, SMT, NSOL, DEPTH)
+        = narrowing(M, T1, ARROW, T2, CANONICAL, FOLDING, none, IRRED, SMT, NSOL, DEPTH) .
+
+    eq narrowing(M, T1, ARROW, T2, CANONICAL, FOLDING, true, false, IRRED, SMT, NSOL, DEPTH)
+        = narrowing(M, T1, ARROW, T2, CANONICAL, FOLDING, filter, IRRED, SMT, NSOL, DEPTH) .
+
+    eq narrowing(M, T1, ARROW, T2, CANONICAL, FOLDING, false, true, IRRED, SMT, NSOL, DEPTH)
+        = narrowing(M, T1, ARROW, T2, CANONICAL, FOLDING, delay, IRRED, SMT, NSOL, DEPTH) .
+
+    eq narrowing(M, T1, ARROW, T2, CANONICAL, FOLDING, true, true, IRRED, SMT, NSOL, DEPTH)
+        = narrowing(M, T1, ARROW, T2, CANONICAL, FOLDING, filter delay, IRRED, SMT, NSOL, DEPTH) .
+
+    op narrowing : Module Term SearchType Term Bool Bool VariantOptionSet TermList TermList Bound Bound -> ParsedSolutions .
+
+    eq narrowing(M, T1, ARROW, T2, false, false, VOPTIONS, IRRED, empty, NSOL, DEPTH) 
+        = VOPTIONS narrowing [NSOL,DEPTH] in M : T1 ARROW T2 .
+
+    eq narrowing(M, T1, ARROW, T2, true, false, VOPTIONS, IRRED, empty, NSOL, DEPTH) 
+        = VOPTIONS canonical narrowing [NSOL,DEPTH] in M : T1 ARROW T2 with irreducible: IRRED .
+
+    eq narrowing(M, T1, ARROW, T2, false, false, VOPTIONS, IRRED, NESMT, NSOL, DEPTH) 
+        = VOPTIONS smt none narrowing [NSOL,DEPTH] in M : T1 ARROW T2 with condition: NESMT .
+
+    eq narrowing(M, T1, ARROW, T2, true, false, VOPTIONS, IRRED, NESMT, NSOL, DEPTH) 
+        = VOPTIONS smt none canonical narrowing [NSOL,DEPTH] in M : T1 ARROW T2 with irreducible: IRRED and condition: NESMT .
+
+    eq narrowing(M, T1, ARROW, T2, false, true, VOPTIONS, IRRED, empty, NSOL, DEPTH) 
+        = VOPTIONS fnarrowing [NSOL,DEPTH] in M : T1 ARROW T2 .
+
+    eq narrowing(M, T1, ARROW, T2, true, true, VOPTIONS, IRRED, empty, NSOL, DEPTH) 
+        = VOPTIONS canonical fnarrowing [NSOL,DEPTH] in M : T1 ARROW T2 with irreducible: IRRED .
+
+    eq narrowing(M, T1, ARROW, T2, false, true, VOPTIONS, IRRED, NESMT, NSOL, DEPTH) 
+        = VOPTIONS smt none fnarrowing [NSOL,DEPTH] in M : T1 ARROW T2 with condition: NESMT .
+
+    eq narrowing(M, T1, ARROW, T2, true, true, VOPTIONS, IRRED, NESMT, NSOL, DEPTH) 
+        = VOPTIONS smt none canonical fnarrowing [NSOL,DEPTH] in M : T1 ARROW T2 with irreducible: IRRED and condition: NESMT .
+
+endfm

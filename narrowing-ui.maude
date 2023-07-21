@@ -1,0 +1,341 @@
+***(
+Copyright 2023 Universitat Politècnica de València, Spain
+
+This program is free software: you can redistribute it and/or modify it under the terms 
+of the GNU General Public License as published by the Free Software Foundation, either 
+version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; 
+without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+)***
+
+set advisory off .
+
+load file.maude
+load narrowing.maude
+load test-modules/pta-coffee.maude
+load test-modules/pta-vending-coffee.maude
+
+fmod NARROWING-STRING is
+    pr META-LEVEL .
+    pr CONVERSION .
+    pr LEXICAL .
+    pr COMMON-NARROWING .
+    
+    op {_,_,_,_,_} : Term Substitution Substitution TermList TermList -> ParsedSolution [ ctor ] .
+    --- State
+    --- Accumulated Substitution
+    --- Variant Unifier
+    --- Irreducible List
+    --- SMT Constraint (empty if no constraint)
+
+    var M : Module .
+    var N : Nat .
+    var Q : Qid .
+    var V : Variable .
+    var T : Term .
+    var NTL : NeTermList .
+    vars SB ACC UNIF : Substitution .
+    var IRRED SMT : TermList .
+    var SOL : ParsedSolutions .
+    
+    op toString : Module TermList -> String .
+    eq toString(M, (empty).TermList) = "" .
+    eq toString(M, T) = printTokens(metaPrettyPrint(M, none, T, mixfix)) .
+    eq toString(M, (T,NTL)) = printTokens(metaPrettyPrint(M, none, T, mixfix)) + "\n" + toString(M,NTL) .
+
+    op toString : Module Substitution -> String .
+    eq toString(M, (none).Substitution) = "none" .
+    eq toString(M, V <- T) = toString(M, V) + " --> " + toString(M, T) .
+    eq toString(M, V <- T ; SB) = toString(M, V) + " --> " + toString(M, T) + "\n" + toString(M, SB) [ owise ] .
+
+    op toString : Module ParsedSolutions -> [String] .
+    eq toString(M, (empty).ParsedSolutions) = "\nNo solution.\n" .
+    eq toString(M, SOL) = toString(M, SOL, 1) [ owise ] .
+
+    op toString : Module ParsedSolutions Nat -> String .
+    eq toString(M, (empty).ParsedSolutions, N) = "\n" .
+    eq toString(M, { T, ACC, UNIF, IRRED, SMT }, N) = "\nSolution " + string(N,10) + 
+        "\nstate: " + toString(M, T) +
+        "\naccumulated substitution:\n" + toString(M, ACC) +
+        "\nvariant unifier:\n" + toString(M, UNIF) +
+        if (IRRED =/= empty) then "\nirreducible terms:\n" + toString(M, IRRED) else "" fi +
+        if (SMT =/= empty) then "\n\nwhere " + toString(M, SMT) else "" fi + "\n" .
+    eq toString(M, ({ T, ACC, UNIF, IRRED, SMT } , SOL), N) = toString(M, { T, ACC, UNIF, IRRED, SMT }, N) + toString(M, SOL, N + 1)  [ owise ] .
+endfm
+
+fmod NARROWING-SYNTAX is
+    pr QID-LIST .
+
+    sorts Token Bubble Command .
+
+    op token : Qid -> Token [ special (id-hook Bubble (1 1) op-hook qidSymbol (<Qids> : ~> Qid)) ] .
+    op bubble : QidList -> Bubble [ special (id-hook Bubble (1 -1) op-hook qidListSymbol (__ : QidList QidList ~> QidList) op-hook qidSymbol (<Qids> : ~> Qid) id-hook Exclude (.)) ] .
+
+    op q : -> Command .
+    op quit : -> Command .
+
+    sorts NarrowMode NarrowModeSet .
+    subsort NarrowMode < NarrowModeSet .
+
+    op mt : -> NarrowModeSet [ ctor ] .
+    op canonical : -> NarrowMode [ ctor ] .
+    op fold : -> NarrowMode [ ctor ] .
+    op __ : NarrowModeSet NarrowModeSet -> NarrowModeSet [ ctor assoc comm id: mt ] .
+
+    sort NarrowSearch .
+    op _=>1_ : Bubble Bubble -> NarrowSearch [ ctor ] .
+    op _=>+_ : Bubble Bubble -> NarrowSearch [ ctor ] .
+    op _=>!_ : Bubble Bubble -> NarrowSearch [ ctor ] .
+    op _=>*_ : Bubble Bubble -> NarrowSearch [ ctor ] .
+
+    op vu-narrow in_:_. : Token NarrowSearch -> Command .
+    op vu-narrow in_:_such`that_. : Token NarrowSearch Bubble -> Command .
+    op vu-narrow [_] in_:_. : Bubble Token NarrowSearch -> Command .
+    op vu-narrow [_] in_:_such`that_. : Bubble Token NarrowSearch Bubble -> Command .
+    op {_} vu-narrow in_:_. : Bubble Token NarrowSearch -> Command .
+    op {_} vu-narrow in_:_such`that_. : Bubble Token NarrowSearch Bubble -> Command .
+    op {_} vu-narrow [_] in_:_. : Bubble Bubble Token NarrowSearch -> Command .
+    op {_} vu-narrow [_] in_:_such`that_. : Bubble Bubble Token NarrowSearch Bubble -> Command .
+
+    op vu-narrow {_} in_:_. : Bubble Token NarrowSearch -> Command .
+    op vu-narrow {_} in_:_such`that_. : Bubble Token NarrowSearch Bubble -> Command .
+    op vu-narrow {_} [_] in_:_. : Bubble Bubble Token NarrowSearch -> Command .
+    op vu-narrow {_} [_] in_:_such`that_. : Bubble Bubble Token NarrowSearch Bubble -> Command .
+    op {_} vu-narrow {_} in_:_. : Bubble Bubble Token NarrowSearch -> Command .
+    op {_} vu-narrow {_} in_:_such`that_. : Bubble Bubble Token NarrowSearch Bubble -> Command .
+    op {_} vu-narrow {_} [_] in_:_. : Bubble Bubble Bubble Token NarrowSearch -> Command .
+    op {_} vu-narrow {_} [_] in_:_such`that_. : Bubble Bubble Bubble Token NarrowSearch Bubble -> Command .
+endfm
+
+mod NARROWING-UI is
+    pr NARROWING-STRING .
+    pr NARROWING .
+    pr STD-STREAM .
+    pr FILE .
+    
+    op oid : -> Oid .
+    op cid : -> Cid .
+   
+    op canonical:_ : Bool -> Attribute [ ctor ] .
+    op folding:_ : Bool -> Attribute [ ctor ] .
+    op filter:_ : Bool -> Attribute [ ctor ] .
+    op delay:_ : Bool -> Attribute [ ctor ] .
+    op module:_ : Module -> Attribute [ ctor ] .
+    op term1:_ : Term -> Attribute [ ctor ] .
+    op term2:_ : Term -> Attribute [ ctor ] .
+    op arrow:_ : SearchType -> Attribute [ ctor ] .
+    op irred:_ : TermList -> Attribute [ ctor ] .
+    op smt:_ : Term -> Attribute [ ctor ] .
+    op solutions:_ : Bound -> Attribute [ ctor ] .
+    op depth:_ : Bound -> Attribute [ ctor ] .
+    
+    op parse : Term -> Msg [ ctor ] .
+
+    var CID : Cid .
+    var OID : Oid .
+    var ATS : AttributeSet .
+    
+    var M : Module .
+    var N : Nat .
+    var STR : String .
+    var T? : [Term] .
+    var T : Term .
+    var TL : TermList .
+    vars NTL NTL1 NTL2 : NeTermList .
+    vars TMODE TCONSTRAINT TOPTIONS TBOUNDS PROBLEM : Term .
+    var PROBLEM? : TermList .
+    vars NQL NQL1 NQL2 MODE OPTIONS BOUNDS MODULE CONSTRAINT : NeQidList .
+    vars MODE? OPTIONS? BOUNDS? MODULE? CONSTRAINT? QL QL1 QL2 : QidList .
+    var ARROW : SearchType .
+    vars NSOL DEPTH : Bound .
+    vars CANONICAL FOLDING FILTER DELAY : Bool .
+    vars T1 T2 : Term .
+    vars IRRED SMT : TermList .
+
+    op init : -> Configuration .
+    eq init = <> < oid : cid | none > write(stdout, oid, "\n") .
+
+    --- quit
+    eq < OID : CID | none > parse('q.Command) = (none).Configuration write(stdout, OID, "Bye.\n\n") .
+    eq < OID : CID | none > parse('quit.Command) = (none).Configuration write(stdout, OID, "Bye.\n\n") .
+    eq < OID : CID | none > parse(T?) = < OID : CID | none > write(stdout, OID, error(9)) [ owise ] .
+
+    eq < OID : CID | none > wrote(OID, stdout) = < OID : CID | none > getLine(stdin, OID, "Narrow> ") [ owise ] .
+    eq < OID : CID | none > gotLine(OID, stdin, STR) = < OID : CID | none > parse(getTerm(metaParse(upModule('NARROWING-SYNTAX,false), none, tokenize(STR), 'Command))) .
+
+    eq getTerm(ambiguity({'vu-narrow`in_:_such`that_.[NTL1],'Command},{'vu-narrow`in_:_.[NTL2],'Command})) = 'vu-narrow`in_:_such`that_.[NTL1] .
+    eq getTerm(ambiguity({'vu-narrow`[_`]in_:_such`that_.[NTL1],'Command},{'vu-narrow`[_`]in_:_.[NTL2],'Command})) = 'vu-narrow`[_`]in_:_such`that_.[NTL1] .
+    eq getTerm(ambiguity({'`{_`}vu-narrow`in_:_such`that_.[NTL1],'Command},{'`{_`}vu-narrow`in_:_.[NTL2],'Command})) = '`{_`}vu-narrow`in_:_such`that_.[NTL1] .
+    eq getTerm(ambiguity({'`{_`}vu-narrow`[_`]in_:_such`that_.[NTL1],'Command},{'`{_`}vu-narrow`[_`]in_:_.[NTL2],'Command})) = '`{_`}vu-narrow`[_`]in_:_such`that_.[NTL1] .
+
+    eq getTerm(ambiguity({'vu-narrow`{_`}in_:_such`that_.[NTL1],'Command},{'vu-narrow`{_`}in_:_.[NTL2],'Command})) = 'vu-narrow`{_`}in_:_such`that_.[NTL1] .
+    eq getTerm(ambiguity({'vu-narrow`{_`}`[_`]in_:_such`that_.[NTL1],'Command},{'vu-narrow`{_`}`[_`]in_:_.[NTL2],'Command})) = 'vu-narrow`{_`}`[_`]in_:_such`that_.[NTL1] .
+    eq getTerm(ambiguity({'`{_`}vu-narrow`{_`}in_:_such`that_.[NTL1],'Command},{'`{_`}vu-narrow`{_`}in_:_.[NTL2],'Command})) = '`{_`}vu-narrow`{_`}in_:_such`that_.[NTL1] .
+    eq getTerm(ambiguity({'`{_`}vu-narrow`{_`}`[_`]in_:_such`that_.[NTL1],'Command},{'`{_`}vu-narrow`{_`}`[_`]in_:_.[NTL2],'Command})) = '`{_`}vu-narrow`{_`}`[_`]in_:_such`that_.[NTL1] .
+
+    sorts NarrowProblem NarrowQidListPair .
+    op {_:_:_} : SearchType QidList QidList -> NarrowProblem [ ctor ] .
+    op {_:_} : QidList QidList -> NarrowQidListPair [ ctor ] .
+    
+    op error : -> [ TermList ] .
+
+    op getProblem : Term -> NarrowProblem .
+    eq getProblem('_=>1_['bubble[NTL1],'bubble[NTL2]]) = { =>1 : downTerm(NTL1, (nil).QidList) : downTerm(NTL2, (nil).QidList) } .
+    eq getProblem('_=>+_['bubble[NTL1],'bubble[NTL2]]) = { =>+ : downTerm(NTL1, (nil).QidList) : downTerm(NTL2, (nil).QidList) } .
+    eq getProblem('_=>!_['bubble[NTL1],'bubble[NTL2]]) = { =>! : downTerm(NTL1, (nil).QidList) : downTerm(NTL2, (nil).QidList) } .
+    eq getProblem('_=>*_['bubble[NTL1],'bubble[NTL2]]) = { =>* : downTerm(NTL1, (nil).QidList) : downTerm(NTL2, (nil).QidList) } .
+    
+    op canonical? : QidList -> Bool .
+    eq canonical?(QL1 'canonical QL2) = true .
+    eq canonical?(QL) = false [ owise ] .
+
+    op folding? : QidList -> Bool .
+    eq folding?(QL1 'fold QL2) = true .
+    eq folding?(QL) = false [ owise ] .
+
+    op filter? : QidList -> Bool .
+    eq filter?(QL1 'filter QL2) = true .
+    eq filter?(QL) = false [ owise ] .
+
+    op delay? : QidList -> Bool .
+    eq delay?(QL1 'delay QL2) = true .
+    eq delay?(QL) = false [ owise ] .
+
+    op getBounds : QidList -> NarrowQidListPair [ ctor ] .
+    eq getBounds(nil) = { 'unbounded : 'unbounded } .
+    eq getBounds('`,) = { 'unbounded : 'unbounded } .
+    eq getBounds('`, NQL) = { 'unbounded : NQL } .
+    eq getBounds(NQL '`,) = { NQL : 'unbounded } .
+    eq getBounds(NQL1 '`, NQL2) = { NQL1 : NQL2 } .
+    eq getBounds(NQL1) = { NQL1 : 'unbounded } [ owise ] .
+
+    op getConstraint : QidList -> NarrowQidListPair .
+    eq getConstraint(nil) = { nil : nil } .
+    eq getConstraint(QL 'irreducible) = { QL : nil } .
+    eq getConstraint(QL1 'irreducible 'and QL2) = { QL1 : QL2 } .
+    eq getConstraint(QL) = { nil : QL } [ owise ] .
+
+    op parseTerm : Module QidList -> [TermList] .
+    eq parseTerm(M, nil) = empty .
+    ceq parseTerm(M, NQL) = getTerm(metaNormalize(M, T)) 
+        if T := getTerm(metaParse(M, none, NQL, anyType)) .
+    eq parseTerm(M, QL1 '`, QL2) = parseTerm(M, QL1) , parseTerm(M,QL2) [ owise ] .
+
+    --- Error Messages
+    op error : Nat -> String .
+    eq error(0) = "\033[1;31mWarning:\033[0m unexpected error.\n" .
+    eq error(1) = "\033[1;31mWarning:\033[0m module not found.\n" .
+    eq error(2) = "\033[1;31mWarning:\033[0m error parsing search arrow.\n" .
+    eq error(3) = "\033[1;31mWarning:\033[0m error parsing lefthand term.\n" .
+    eq error(4) = "\033[1;31mWarning:\033[0m error parsing righthand term.\n" .
+    eq error(5) = "\033[1;31mWarning:\033[0m error parsing number of solutions.\n" .
+    eq error(6) = "\033[1;31mWarning:\033[0m error parsing depth.\n" .
+    eq error(7) = "\033[1;31mWarning:\033[0m error parsing irreducible list.\n" .
+    eq error(8) = "\033[1;31mWarning:\033[0m error parsing SMT constraint.\n" .
+    eq error(9) = "\033[1;31mWarning:\033[0m error parsing command.\n" .
+
+    --- Parsing
+    eq parse('vu-narrow`in_:_.['token[MODULE],PROBLEM]) = check(downTerm(MODULE, (nil).QidList), PROBLEM, nil, nil, nil, nil) .
+    eq parse('vu-narrow`[_`]in_:_.['bubble[TBOUNDS],'token[MODULE],PROBLEM]) = check(downTerm(MODULE, (nil).QidList), PROBLEM, nil, nil, downTerm(TBOUNDS, (nil).QidList), nil) .
+    eq parse('vu-narrow`in_:_such`that_.['token[MODULE],PROBLEM,'bubble[TCONSTRAINT]]) = check(downTerm(MODULE, (nil).QidList), PROBLEM, nil, nil, nil, downTerm(TCONSTRAINT, (nil).QidList)) .
+    eq parse('vu-narrow`[_`]in_:_such`that_.['bubble[TBOUNDS],'token[MODULE],PROBLEM,'bubble[TCONSTRAINT]]) = check(downTerm(MODULE, (nil).QidList), PROBLEM, nil, nil, downTerm(TBOUNDS, (nil).QidList), downTerm(TCONSTRAINT, (nil).QidList)) .
+
+    eq parse('`{_`}vu-narrow`in_:_.['bubble[TMODE],'token[MODULE],PROBLEM]) = check(downTerm(MODULE, (nil).QidList), PROBLEM, downTerm(TMODE, (nil).QidList), nil, nil, nil) .
+    eq parse('`{_`}vu-narrow`[_`]in_:_.['bubble[TMODE],'bubble[TBOUNDS],'token[MODULE],PROBLEM]) = check(downTerm(MODULE, (nil).QidList), PROBLEM, downTerm(TMODE, (nil).QidList), nil, downTerm(TBOUNDS, (nil).QidList), nil) .
+    eq parse('`{_`}vu-narrow`in_:_such`that_.['bubble[TMODE],'token[MODULE],PROBLEM,'bubble[TCONSTRAINT]]) = check(downTerm(MODULE, (nil).QidList), PROBLEM, downTerm(TMODE, (nil).QidList), nil, nil, downTerm(TCONSTRAINT, (nil).QidList)) .
+    eq parse('`{_`}vu-narrow`[_`]in_:_such`that_.['bubble[TMODE],'bubble[TBOUNDS],'token[MODULE],PROBLEM,'bubble[TCONSTRAINT]]) = check(downTerm(MODULE, (nil).QidList), PROBLEM, downTerm(TMODE, (nil).QidList), nil, downTerm(TBOUNDS, (nil).QidList), downTerm(TCONSTRAINT, (nil).QidList)) .
+
+    eq parse('vu-narrow`{_`}in_:_.['bubble[TOPTIONS],'token[MODULE],PROBLEM]) = check(downTerm(MODULE, (nil).QidList), PROBLEM, nil, downTerm(TOPTIONS, (nil).QidList), nil, nil) .
+    eq parse('vu-narrow`{_`}`[_`]in_:_.['bubble[TOPTIONS],'bubble[TBOUNDS],'token[MODULE],PROBLEM]) = check(downTerm(MODULE, (nil).QidList), PROBLEM, nil, downTerm(TOPTIONS, (nil).QidList), downTerm(TBOUNDS, (nil).QidList), nil) .
+    eq parse('vu-narrow`{_`}in_:_such`that_.['bubble[TOPTIONS],'token[MODULE],PROBLEM,'bubble[TCONSTRAINT]]) = check(downTerm(MODULE, (nil).QidList), PROBLEM, nil, downTerm(TOPTIONS, (nil).QidList), nil, downTerm(TCONSTRAINT, (nil).QidList)) .
+    eq parse('vu-narrow`{_`}`[_`]in_:_such`that_.['bubble[TOPTIONS],'bubble[TBOUNDS],'token[MODULE],PROBLEM,'bubble[TCONSTRAINT]]) = check(downTerm(MODULE, (nil).QidList), PROBLEM, nil, downTerm(TOPTIONS, (nil).QidList), downTerm(TBOUNDS, (nil).QidList), downTerm(TCONSTRAINT, (nil).QidList)) .
+
+    eq parse('`{_`}vu-narrow`{_`}in_:_.['bubble[TMODE],'bubble[TOPTIONS],'token[MODULE],PROBLEM]) = check(downTerm(MODULE, (nil).QidList), PROBLEM, downTerm(TMODE, (nil).QidList), downTerm(TOPTIONS, (nil).QidList), nil, nil) .
+    eq parse('`{_`}vu-narrow`{_`}`[_`]in_:_.['bubble[TMODE],'bubble[TOPTIONS],'bubble[TBOUNDS],'token[MODULE],PROBLEM]) = check(downTerm(MODULE, (nil).QidList), PROBLEM, downTerm(TMODE, (nil).QidList), downTerm(TOPTIONS, (nil).QidList), downTerm(TBOUNDS, (nil).QidList), nil) .
+    eq parse('`{_`}vu-narrow`{_`}in_:_such`that_.['bubble[TMODE],'bubble[TOPTIONS],'token[MODULE],PROBLEM,'bubble[TCONSTRAINT]]) = check(downTerm(MODULE, (nil).QidList), PROBLEM, downTerm(TMODE, (nil).QidList), downTerm(TOPTIONS, (nil).QidList), nil, downTerm(TCONSTRAINT, (nil).QidList)) .
+    eq parse('`{_`}vu-narrow`{_`}`[_`]in_:_such`that_.['bubble[TMODE],'bubble[TOPTIONS],'bubble[TBOUNDS],'token[MODULE],PROBLEM,'bubble[TCONSTRAINT]]) = check(downTerm(MODULE, (nil).QidList), PROBLEM, downTerm(TMODE, (nil).QidList), downTerm(TOPTIONS, (nil).QidList), downTerm(TBOUNDS, (nil).QidList), downTerm(TCONSTRAINT, (nil).QidList)) .
+
+    --- MODULE, PROBLEM, MODE, OPTIONS, BOUNDS, CONSTRAINTS
+    op check : TermList TermList TermList TermList TermList TermList -> Configuration [ ctor ] .
+
+    --- Check Module
+    eq [check-module] : < OID : CID | ATS > check(MODULE, PROBLEM, MODE?, OPTIONS?, BOUNDS?, CONSTRAINT?) = 
+        if upModule(MODULE, false) :: Module
+        then < OID : CID | ATS, module: upModule(MODULE, false) > check(empty, PROBLEM, MODE?, OPTIONS?, BOUNDS?, CONSTRAINT?)
+        else < OID : CID | ATS > write(stdout, OID, error(1))
+        fi .
+
+    --- Check Problem
+    ceq [check-problem] : < OID : CID | ATS, module: M > check(empty, PROBLEM, MODE?, OPTIONS?, BOUNDS?, CONSTRAINT?) = 
+        if (parseTerm(M, QL1) :: Term)
+        then
+            if (parseTerm(M, QL2) :: Term)
+            then < OID : CID | ATS, module: M, term1: parseTerm(M, QL1), term2: parseTerm(M, QL2), arrow: ARROW > check(empty, empty, MODE?, OPTIONS?, BOUNDS?, CONSTRAINT?)
+            else < OID : CID | none > write(stdout, OID, error(4))
+            fi
+        else < OID : CID | none > write(stdout, OID, error(3))
+        fi
+        if { ARROW : QL1 : QL2 } := getProblem(PROBLEM) .
+
+    --- Check Mode
+    eq [check-mode] : < OID : CID | ATS, module: M > check(empty, empty, MODE?, OPTIONS?, BOUNDS?, CONSTRAINT?) = < OID : CID | ATS, module: M, canonical: canonical?(MODE?), folding: folding?(MODE?) > check(empty, empty, empty, OPTIONS?, BOUNDS?, CONSTRAINT?) .
+    
+    --- Check Options
+    eq [check-options] : < OID : CID | ATS, module: M > check(empty, empty, empty, OPTIONS?, BOUNDS?, CONSTRAINT?) = < OID : CID | ATS, module: M, filter: filter?(OPTIONS?), delay: delay?(OPTIONS?) > check(empty, empty, empty, empty, BOUNDS?, CONSTRAINT?) .
+
+    --- Check Bounds
+    ceq [check-bounds] : < OID : CID | ATS, module: M > check(empty, empty, empty, empty, BOUNDS?, CONSTRAINT?) = 
+        if (parseTerm(upModule('BOUND, false), QL1) :: Term)
+        then
+            if (parseTerm(upModule('BOUND, false), QL2) :: Term)
+            then < OID : CID | ATS, module: M, solutions: downTerm(parseTerm(upModule('BOUND, false), QL1), unbounded), depth: downTerm(parseTerm(upModule('BOUND, false), QL2), unbounded) > check(empty, empty, empty, empty, empty, CONSTRAINT?)
+            else < OID : CID | none > write(stdout, OID, error(6))
+            fi
+        else < OID : CID | none > write(stdout, OID, error(5))
+        fi
+        if { QL1 : QL2 } := getBounds(BOUNDS?) .
+
+    --- Check Constraints
+    ceq [check-constr] : < OID : CID | ATS, module: M > check(empty, empty, empty, empty, empty, CONSTRAINT?) = 
+        if (parseTerm(M, QL1) :: TermList)
+        then
+            if (parseTerm(M, QL2) :: TermList)
+            then < OID : CID | ATS, module: M, irred: parseTerm(M, QL1), smt: parseTerm(M, QL2) > check(empty, empty, empty, empty, empty, empty)
+            else < OID : CID | none > write(stdout, OID, error(8))
+            fi
+        else < OID : CID | none > write(stdout, OID, error(7))
+        fi
+        if { QL1 : QL2 } := getConstraint(CONSTRAINT?) .
+
+    eq [do-narrowing] : < OID : CID | 
+        module: M,                  --- Module
+        term1: T1,                  --- Term
+        arrow: ARROW,               --- Qid '=>1 '=>! '=>*
+        term2: T2,                  --- Term
+        canonical: CANONICAL,       --- Bool
+        folding: FOLDING,           --- Bool
+        filter: FILTER,             --- Bool
+        delay: DELAY,               --- Bool
+        irred: IRRED,               --- TermList (empty if no IRRED)
+        smt: SMT,                   --- TermList (empty if no SMT term, single term otherwise)
+        solutions: NSOL,            --- Nat
+        depth: DEPTH                --- Nat
+    > check(empty, empty, empty, empty, empty, empty) = < OID : CID | none >
+        if toString(M, narrowing(M, T1, ARROW, T2, CANONICAL, FOLDING, FILTER, DELAY, IRRED, SMT, NSOL, DEPTH)) :: String
+        then write(stdout, OID, toString(M, narrowing(M, T1, ARROW, T2, CANONICAL, FOLDING, FILTER, DELAY, IRRED, SMT, NSOL, DEPTH) ) + "\n")
+        else write(stdout, OID, error(0))
+        fi .
+    
+    rl < OID : CID | ATS, module: M > => < OID : CID | none > write(stdout, OID, error(0)) .
+endm
+
+---set trace on .
+---set trace select on  .
+---trace select do-narrowing .
+
+erew in NARROWING-UI : init .
+
+eof
+
+

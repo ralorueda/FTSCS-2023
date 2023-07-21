@@ -1,0 +1,60 @@
+load smt.maude
+
+mod PTA-VENDING-COFFEE is
+    protecting REAL .
+    sorts State NState DState Location .
+    subsorts NState DState < State .
+
+    sorts Coin Money .
+    subsort Coin < Money .
+    ops $ q : -> Coin .
+    op empty : -> Money .
+    op __ : Money Money -> Money [assoc comm id: empty] .
+
+    sort CNat .
+    ops 0 1 : -> CNat .
+    op _+_ : CNat CNat -> CNat [ctor assoc comm id: 0] .
+
+    vars X1 X2 X1' X2' : Real .
+    vars P1 P2 P3 : Real .
+    var T : Real .
+    var M M' : Money .
+    var C : CNat .
+
+    --- Configurations
+    ops idle addSugar preparingCoffee done : -> Location [ctor] .
+    op <_:_;_> <_;_;_> <_;_> : Location Real Real Real Real Real Money CNat -> DState [ctor] .
+    op [_:_;_] <_;_;_> <_;_> : Location Real Real Real Real Real Money CNat -> NState [ctor] .
+
+    eq [change] : q q q q M = $ M [variant] .
+
+    crl [idle-bStart] : < idle : X1 ; X2 > < P1 ; P2 ; P3 > < q q q M ; C > => [ addSugar : X1' ; X2' ] < P1 ; P2 ; P3 > < M ; C >
+                        if (X1' === 0/1 and X2' === 0/1 and X2' <= P2) = true [nonexec] .
+
+    crl [idle-tick] : [ idle : X1 ; X2 ] < P1 ; P2 ; P3 > < M ; C > => < idle : X1' ; X2' > < P1 ; P2 ; P3 > < M ; C >
+                        if (X1' === X1 + T and X2' === X2 + T and T >= 0/1) = true [nonexec] .
+
+    crl [add-sugar-bSugar] : < addSugar : X1 ; X2 > < P1 ; P2 ; P3 > < M ; C > => [ addSugar : X1' ; X2 ] < P1 ; P2 ; P3 > < M ; C >
+                        if (X1' === 0/1 and X1 >= P1 and X2 <= P2) = true [nonexec] .
+
+    crl [add-sugar-cup] : < addSugar : X1 ; X2 > < P1 ; P2 ; P3 > < M ; C > => [ preparingCoffee : X1 ; X2 ] < P1 ; P2 ; P3 > < M ; C >
+                        if (X2 === P2 and X2 <= P3) = true .
+
+    crl [add-sugar-tick] : [ addSugar : X1 ; X2 ] < P1 ; P2 ; P3 > < M ; C > => < addSugar : X1' ; X2' > < P1 ; P2 ; P3 > < M ; C >
+                        if (X1' === X1 + T and X2' === X2 + T and X2' <= P2 and T >= 0/1) = true [nonexec] .
+
+    crl [preparing-coffee-coffee] : < preparingCoffee : X1 ; X2 > < P1 ; P2 ; P3 > < M ; C + 1 > => [ done : X1' ; X2 ] < P1 ; P2 ; P3 > < M ; C + 1 >
+                        if (X1' === 0/1 and X2 === P3 and X1' <= 10/1) = true [nonexec] .
+
+    crl [preparing-coffee-tick] : [ preparingCoffee : X1 ; X2 ] < P1 ; P2 ; P3 > < M ; C > => < preparingCoffee : X1' ; X2' > < P1 ; P2 ; P3 > < M ; C >
+                        if (X1' === X1 + T and X2' === X2 + T and X2' <= P3 and T >= 0/1) = true [nonexec] .
+
+    crl [done-sleep] : < done : X1 ; X2 > < P1 ; P2 ; P3 > < M ; C > => [ idle : X1 ; X2 ] < P1 ; P2 ; P3 > < empty ; 0 >
+                        if (X1 === 10/1) = true .
+
+    crl [done-bStart] : < done : X1 ; X2 > < P1 ; P2 ; P3 > < q q q M ; C > => [ addSugar : X1' ; X2' ] < P1 ; P2 ; P3 > < M ; C >
+                        if (X1' === 0/1 and X2' === 0/1 and X2' <= P2) = true [nonexec] .
+
+    crl [done-tick] : [ done : X1 ; X2 ] < P1 ; P2 ; P3 > < M ; C > => < done : X1' ; X2' > < P1 ; P2 ; P3 > < M ; C >
+                        if (X1' === X1 + T and X2' === X2 + T and X1' <= 10/1 and T >= 0/1) = true [nonexec] .
+endm

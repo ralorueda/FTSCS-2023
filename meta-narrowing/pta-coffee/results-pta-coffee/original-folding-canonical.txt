@@ -1,0 +1,65 @@
+		     \||||||||||||||||||/
+		   --- Welcome to Maude ---
+		     /||||||||||||||||||\
+	    Maude 3.3.1 built: Apr 13 2023 16:10:31
+	     Copyright 1997-2023 SRI International
+		   Sat Jul 22 00:39:00 2023
+==========================================
+reduce in EXECUTE-MOD : smt canonical fnarrowing[100,unbounded]in upModule(
+    'PTA-COFFEE, false) : upTerm([idle : X1:Real ; X2:Real]< P1:Real ; P2:Real
+    ; P3:Real >) =>* upTerm(< done : X1':Real ; X2':Real > < P1:Real ; P2:Real
+    ; P3:Real >) with irreducible: empty and condition: upTerm(X1:Real ===
+    X2:Real and X1:Real >= (0/1).Real and P1:Real >= (0/1).Real and P2:Real >=
+    (0/1).Real and P3:Real >= (0/1).Real) .
+rewrites: 5854 in 8ms cpu (7ms real) (731750 rewrites/second)
+result ParsedSolution: 
+
+### Solution 1 ###
+state:
+'<_:_;_>`<_;_;_>['done.Location,'$54:Real,'$56:Real,'$51:Real,'$52:Real,
+    '$53:Real]
+accumulated substitution: 
+  'P1:Real <- '$51:Real ; 
+  'P2:Real <- '$52:Real ; 
+  'P3:Real <- '$53:Real ; 
+  'X1:Real <- '$1:Real ; 
+  'X2:Real <- '$2:Real
+variant unifier: 
+  '$51:Real <- '@3:Real ; 
+  '$52:Real <- '@4:Real ; 
+  '$53:Real <- '@5:Real ; 
+  '$54:Real <- '@1:Real ; 
+  '$56:Real <- '@2:Real ; 
+  'P1:Real <- '@3:Real ; 
+  'P2:Real <- '@4:Real ; 
+  'P3:Real <- '@5:Real ; 
+  'X1':Real <- '@1:Real ; 
+  'X2':Real <- '@2:Real
+irreducible terms:
+'`[_:_;_`]<_;_;_>['idle.Location,'$1:Real,'$2:Real,'$3:Real,'$4:Real,'$5:Real],
+    '<_:_;_>`<_;_;_>['idle.Location,'$9:Real,'$10:Real,'$11:Real,'$12:Real,
+    '$13:Real],'`[_:_;_`]<_;_;_>['addSugar.Location,'$16:Real,'$17:Real,
+    '$18:Real,'$19:Real,'$20:Real],'<_:_;_>`<_;_;_>['addSugar.Location,
+    '$24:Real,'$25:Real,'$26:Real,'$27:Real,'$28:Real],'`[_:_;_`]<_;_;_>[
+    'preparingCoffee.Location,'$35:Real,'$36:Real,'$37:Real,'$38:Real,
+    '$39:Real],'<_:_;_>`<_;_;_>['preparingCoffee.Location,'$43:Real,'$44:Real,
+    '$45:Real,'$46:Real,'$47:Real],'`[_:_;_`]<_;_;_>['done.Location,'$49:Real,
+    '$50:Real,'$51:Real,'$52:Real,'$53:Real]
+SMT constraint:
+{'_and_['_and_['_and_['_and_['_===_['$54:Real,'_+_['$49:Real,'$55:Real]],
+    '_===_['$56:Real,'_+_['$50:Real,'$55:Real]]],'_<=_['$54:Real,'10/1.Real]],
+    '_>=_['$55:Real,'0/1.Real]],'_and_['_and_['_and_['_===_['$49:Real,
+    '0/1.Real],'_===_['$50:Real,'$53:Real]],'_<=_['$49:Real,'10/1.Real]],
+    '_and_['_and_['_and_['_and_['_===_['$43:Real,'_+_['$35:Real,'$41:Real]],
+    '_===_['$50:Real,'_+_['$36:Real,'$41:Real]]],'_<=_['$50:Real,'$53:Real]],
+    '_>=_['$41:Real,'0/1.Real]],'_and_['_and_['_===_['$36:Real,'$52:Real],
+    '_<=_['$36:Real,'$53:Real]],'_and_['_and_['_and_['_and_['_===_['$35:Real,
+    '_+_['$16:Real,'$22:Real]],'_===_['$36:Real,'_+_['$17:Real,'$22:Real]]],
+    '_<=_['$36:Real,'$52:Real]],'_>=_['$22:Real,'0/1.Real]],'_and_['_and_[
+    '_and_['_===_['$16:Real,'0/1.Real],'_===_['$17:Real,'0/1.Real]],'_<=_[
+    '$17:Real,'$52:Real]],'_and_['_and_['_and_['_===_['$9:Real,'_+_['$1:Real,
+    '$7:Real]],'_===_['$10:Real,'_+_['$2:Real,'$7:Real]]],'_>=_['$7:Real,
+    '0/1.Real]],'_and_['_and_['_and_['_and_['_===_['$1:Real,'$2:Real],'_>=_[
+    '$1:Real,'0/1.Real]],'_>=_['$51:Real,'0/1.Real]],'_>=_['$52:Real,
+    '0/1.Real]],'_>=_['$53:Real,'0/1.Real]]]]]]]]] : true}
+Bye.

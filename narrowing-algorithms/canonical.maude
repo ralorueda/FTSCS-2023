@@ -1,0 +1,339 @@
+load utilities.maude
+
+fmod CANONICAL-NARROWING is
+    protecting NARROWING-UTILITIES .
+
+    --- Variables declaration
+    var VOPTIONS : VariantOptionSet .   vars N M : Bound .   vars NZN NZM : NzBound .      var MOD : Module .   var CTX1 CTX2 : Context .  
+    vars ITERM TTERM T1 T2 RHS LHS : Term .   var SEARCH : SearchType .   var UNIFCOUNTER : NzNat .   vars SOLUTIONS1 SOLUTIONS2 : Solutions .   
+    vars SUBS1 SUBS2 SUBS3 SUBS4 ACSUBS1 ACSUBS2 : Substitution .   vars NODES1 NODES2 NODES3 : Nodes .   var NARRAPPLYRES1 : NarrowingApplyResult .   
+    vars QID1 QID2 RLABEL1 RLABEL2 : Qid .   var TYPE1 TYPE2 : Type .   var IRREDTLIST1 IRREDTLIST2 IRREDTLIST3 : TermList .
+    vars NODEID1 VCOUNTER NCOUNTER SCOUNTER BRANCH1 BRANCH2 PARENTID DEPTH1 DEPTH2 GPARENTID SOLID  : Nat .  
+    var RLS : RuleSet .   var ATTRS : AttrSet .
+
+
+
+    ----------------------------------------------------------------------------------------------------------
+    --- Transforms the user command into the defined data structures. The execution will depend on the     ---
+    --- search arrow used (computation of the initial node or not).                                        ---
+    ----------------------------------------------------------------------------------------------------------
+    
+    --- If there are no variant options, use none
+    eq canonical narrowing [N,M] in MOD : ITERM SEARCH TTERM with irreducible: IRREDTLIST1
+            = none canonical narrowing [N,M] in MOD : ITERM SEARCH TTERM with irreducible: IRREDTLIST1 .
+
+    --- Solutions limit = 0 -> No solutions found
+    eq VOPTIONS canonical narrowing [0,M] in MOD : ITERM SEARCH TTERM with irreducible: IRREDTLIST1
+            = toString(noSolutions) .    
+
+    --- Solutions limit =/= 0 -> Begin with the algorithm (rename variables first)
+    eq VOPTIONS canonical narrowing [NZN,M] in MOD : ITERM =>1 TTERM with irreducible: IRREDTLIST1
+            = generateNode(
+                {can, transformMod(MOD), 
+                ITERM --- Rename initial term
+                =>1
+                TTERM, --- Rename target term
+                IRREDTLIST1, 
+                (VOPTIONS), < NZN,1 >,
+                | 1, 
+                1, --- Update variable counter
+                0 |,
+                [{0, ITERM, none,
+                IRREDTLIST1,
+                0, 0, 0, # noSolution #}],
+                [empty]}) .
+    
+    eq VOPTIONS canonical narrowing [NZN,M] in MOD : ITERM =>+ TTERM with irreducible: IRREDTLIST1
+            = generateNode(
+                {can, transformMod(MOD), 
+                ITERM --- Rename initial term
+                =>+
+                TTERM, --- Rename target term
+                IRREDTLIST1, 
+                (VOPTIONS), < NZN,M >,
+                | 1, 
+                1, --- Update variable counter
+                0 |,
+                [{0, ITERM, none, 
+                IRREDTLIST1,
+                0, 0, 0, # noSolution #}],
+                [empty]}) .
+
+    eq VOPTIONS canonical narrowing [NZN,M] in MOD : ITERM SEARCH TTERM with irreducible: IRREDTLIST1
+            = initialTermSolutions(
+                {can, transformMod(MOD), 
+                ITERM --- Rename initial term
+                SEARCH
+                TTERM, --- Rename target term
+                IRREDTLIST1, 
+                (VOPTIONS), < NZN,M >,
+                | 1, 
+                1, --- Update variable counter
+                0 |,
+                [{0, ITERM, none, 
+                IRREDTLIST1,
+                0, 0, 0, # findSolutions(transformMod(MOD), 
+                ITERM --- Rename initial term
+                =? 
+                TTERM, --- Rename target term
+                VOPTIONS, IRREDTLIST1, 0) #}],
+                [empty]}) [owise] .
+
+
+
+    ----------------------------------------------------------------------------------------------------------
+    --- Search for solutions of a node                                                                     ---
+    ----------------------------------------------------------------------------------------------------------
+
+    eq findSolutions(MOD, ITERM =? TTERM, VOPTIONS, IRREDTLIST1, 0) 
+            = metaVariantUnify(MOD, ITERM =? TTERM, IRREDTLIST1, '%, VOPTIONS, 0) ; 
+              findSolutions(MOD, ITERM =? TTERM, VOPTIONS, IRREDTLIST1, 1) .
+
+    eq {SUBS1, QID1} ; findSolutions(MOD, ITERM =? TTERM, VOPTIONS, IRREDTLIST1, UNIFCOUNTER)
+            = {SUBS1, QID1} ; metaVariantUnify(MOD, ITERM =? TTERM, IRREDTLIST1, '%, VOPTIONS, UNIFCOUNTER) ; 
+              findSolutions(MOD, ITERM =? TTERM, VOPTIONS, IRREDTLIST1, UNIFCOUNTER + 1) .
+    
+    --- Stop looking for unifiers when noUnifier / noUnifierIncomplete is returned
+    eq SOLUTIONS1 ; noUnifier ; findSolutions(MOD, ITERM =? TTERM, VOPTIONS, IRREDTLIST1, UNIFCOUNTER)
+            = SOLUTIONS1 .
+
+    eq SOLUTIONS1 ; noUnifierIncomplete ; findSolutions(MOD, ITERM =? TTERM, VOPTIONS, IRREDTLIST1, UNIFCOUNTER)
+            = SOLUTIONS1 .
+
+
+    ----------------------------------------------------------------------------------------------------------
+    --- Compute the solutions of the initial node (if they exist)                                          ---
+    ----------------------------------------------------------------------------------------------------------
+
+    --- If Max solutions reached, return output (remove unifiers left iteratively first)
+    eq initialTermSolutions({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < 0,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [{0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 ; {SUBS1, QID1} # }], [empty]})
+            = initialTermSolutions({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < 0,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+                [{0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 # }], [empty]}) .
+
+    eq initialTermSolutions({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < 0,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [{0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 # }], [empty]})
+            = toString({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < 0,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+                [{0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 # }], [empty]}) [owise] .
+
+    --- Get solutions from unifiers when MaxSol = unbounded
+    eq initialTermSolutions({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < unbounded,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [{0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 ; {SUBS1, QID1} ; SOLUTIONS2 # }], [empty]})
+            = initialTermSolutions({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < unbounded,M >, | NCOUNTER, VCOUNTER, SCOUNTER + 1 |,
+                [{0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 ; {SCOUNTER, SUBS1} ; SOLUTIONS2 # }], [empty]}) .
+
+    --- Get solutions from unifiers when MaxSol is a nat > 0
+    eq initialTermSolutions({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < s(N),M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [{0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 ; {SUBS1, QID1} ; SOLUTIONS2 # }], [empty]})
+            = initialTermSolutions({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER + 1 |,
+                [{0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 ; {SCOUNTER, SUBS1} ; SOLUTIONS2 # }], [empty]}) .
+
+    --- If all unifiers have been processed, continue with the node generation
+    eq initialTermSolutions({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < NZN,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [{0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 # }], [empty]})
+            = generateNode({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < NZN,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+                [{0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 # }], [empty]}) [owise] .
+
+
+
+    ----------------------------------------------------------------------------------------------------------
+    --- Generate a new node in the search tree                                                             ---
+    ----------------------------------------------------------------------------------------------------------
+    
+    --- Stop if MaxDepth = 0 
+    eq generateNode({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,0 >, | NCOUNTER, VCOUNTER, SCOUNTER |, [NODES1], [NODES2]})
+            = toString({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,0 >, | NCOUNTER, VCOUNTER, SCOUNTER |, [NODES1], [NODES2]}) .
+
+    --- Generate the first node
+    eq generateNode({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,NZM >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+        [{0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 # }], [empty]})
+            = renameVars({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,NZM >, | NCOUNTER + 1, VCOUNTER, SCOUNTER |, 
+                [{0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 # }], 
+                [rNode({NCOUNTER, metaNarrowingApply(MOD, ITERM, IRREDTLIST1, '%, VOPTIONS, 0), none, IRREDTLIST1, 0, 1, 0, # noSolution # })]}) .
+
+    --- Generate nodes in depth 1 (MaxDepth = 1)
+    eq generateNode({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,1 >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+        [{0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 # } ; NODES1], 
+        [{NODEID1, NARRAPPLYRES1, ACSUBS1, IRREDTLIST2, BRANCH1, 1, 0, # SOLUTIONS2 # } ; NODES2]})
+            = renameVars({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,1 >, | NCOUNTER + 1, VCOUNTER, SCOUNTER |, 
+                [{0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 # } ;
+                NODES1 ; 
+                {NODEID1, NARRAPPLYRES1, ACSUBS1, IRREDTLIST2, BRANCH1, 1, 0, # SOLUTIONS2 # }], 
+                [rNode({NCOUNTER, 
+                metaNarrowingApply(MOD, ITERM, IRREDTLIST1, '%, VOPTIONS, s(BRANCH1)), 
+                none, IRREDTLIST1, s(BRANCH1), 1, 0, # noSolution # }) ; NODES2]}) .
+
+    --- Generate nodes in depth 1 (MaxDepth > 1)
+    eq generateNode({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,NZM >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+        [{0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 # } ; NODES1], 
+        [{NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, IRREDTLIST2, BRANCH1, 1, 0, # SOLUTIONS2 # } ; NODES2]})
+            = renameVars({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,NZM >, | NCOUNTER + 2, VCOUNTER, SCOUNTER |, 
+                [{0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 # } ;
+                NODES1 ; 
+                {NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, IRREDTLIST2, BRANCH1, 1, 0, # SOLUTIONS2 # }], 
+                [rNode({NCOUNTER, 
+                metaNarrowingApply(MOD, ITERM, IRREDTLIST1, '%, VOPTIONS, s(BRANCH1)), 
+                none, IRREDTLIST1, s(BRANCH1), 1, 0, # noSolution # }) ; 
+                NODES2 ;
+                rNode({NCOUNTER + 1, 
+                metaNarrowingApply(MOD, T1, IRREDTLIST2, '%, VOPTIONS, 0), 
+                ACSUBS1, IRREDTLIST2, 0, 2, NODEID1, # noSolution # })]}) [owise] .
+
+    --- Generate nodes in depth > 1 (MaxDepth reached)
+    eq generateNode({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,s(s(M)) >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+        [NODES1 ; {PARENTID, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, IRREDTLIST2, BRANCH1, DEPTH1, GPARENTID, # SOLUTIONS1 # } ; NODES2], 
+        [{NODEID1, NARRAPPLYRES1, ACSUBS2, IRREDTLIST3, BRANCH2, s(s(M)), PARENTID, # SOLUTIONS2 # } ; NODES3]})
+            = renameVars({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,s(s(M)) >, | NCOUNTER + 1, VCOUNTER, SCOUNTER |, 
+                [NODES1 ; {PARENTID, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, IRREDTLIST2, BRANCH1, DEPTH1, GPARENTID, # SOLUTIONS1 # } ; 
+                NODES2 ;
+                {NODEID1, NARRAPPLYRES1, ACSUBS2, IRREDTLIST3, BRANCH2, s(s(M)), PARENTID, # SOLUTIONS2 # }],
+                [rNode({NCOUNTER, 
+                metaNarrowingApply(MOD, T1, IRREDTLIST2, '%, VOPTIONS, s(BRANCH2)), 
+                ACSUBS1, IRREDTLIST2, s(BRANCH2), s(s(M)), PARENTID, # noSolution # }) ; NODES3]}) .  
+
+    --- Generate nodes in depth > 1 (MaxDepth not reached)
+    eq generateNode({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,NZM >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+        [NODES1 ; {PARENTID, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, IRREDTLIST2, BRANCH1, DEPTH1, GPARENTID, # SOLUTIONS1 # } ; NODES2], 
+        [{NODEID1, {T2, TYPE2, CTX2, RLABEL2, SUBS3, SUBS4, QID2}, ACSUBS2, IRREDTLIST3, BRANCH2, DEPTH2, PARENTID, # SOLUTIONS2 # } ; NODES3]})
+            = renameVars({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,NZM >, | NCOUNTER + 2, VCOUNTER, SCOUNTER |, 
+                [NODES1 ; {PARENTID, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, IRREDTLIST2, BRANCH1, DEPTH1, GPARENTID, # SOLUTIONS1 # } ; 
+                NODES2 ;
+                {NODEID1, {T2, TYPE2, CTX2, RLABEL2, SUBS3, SUBS4, QID2}, ACSUBS2, IRREDTLIST3, BRANCH2, DEPTH2, PARENTID, # SOLUTIONS2 # }],
+                [rNode({NCOUNTER, 
+                metaNarrowingApply(MOD, T1, IRREDTLIST2, '%, VOPTIONS, s(BRANCH2)), 
+                ACSUBS1, IRREDTLIST2, s(BRANCH2), DEPTH2, PARENTID, # noSolution # }) ; 
+                NODES3 ;
+                rNode({NCOUNTER + 1, 
+                metaNarrowingApply(MOD, T2, IRREDTLIST3, '%, VOPTIONS, 0), 
+                ACSUBS2, IRREDTLIST3, 0, s(DEPTH2), NODEID1, # noSolution # })]}) [owise] . 
+
+
+
+    ----------------------------------------------------------------------------------------------------------
+    --- Rename variables in a node                                                                         ---
+    ----------------------------------------------------------------------------------------------------------
+    
+    --- Remove the node if it is deeper than MaxDepth
+    eq renameVars({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [NODES2 ; rNode({NODEID1, NARRAPPLYRES1, ACSUBS1, IRREDTLIST2, BRANCH1, s(M), PARENTID, # SOLUTIONS1 # }) ; NODES3]})
+                    =  renameVars({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                            [NODES1], [NODES2 ; NODES3]}) .
+
+    --- End the algorithm if the NodeList to proccess is empty
+    eq renameVars({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, [NODES1], [empty]})
+                    =  toString({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, [NODES1], [empty]}) .
+
+    --- If the result of metaNarrowingApply was failure, remove the node
+    eq renameVars({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [rNode({NODEID1, failure, ACSUBS1, IRREDTLIST2, BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 # }) ; NODES2]})
+                    =  renameVars({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                            [NODES1], [NODES2]}) [owise] .
+
+    --- Rename variables of the new nodes
+    eq renameVars({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [NODES2 ; rNode({NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, none, IRREDTLIST2, BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 # }) ; NODES3]})
+                    = renameVars({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,M >, | NCOUNTER, 
+                            VCOUNTER + getVarsNumber(applySub((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)), rename(getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2),VCOUNTER))),
+                            SCOUNTER |, 
+                            [NODES1], 
+                            [NODES2 ; {NODEID1, 
+                            {applySub(T1, rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER)), 
+                            TYPE1, CTX1, RLABEL1, 
+                            applySub(SUBS1, rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER)), 
+                            applySub(SUBS2, rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER)), 
+                            QID1}, 
+                            reduceSub(MOD, applySub(SUBS1, rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER))),
+                            applySub((IRREDTLIST2, getIrreducibilityTerm(MOD, RLABEL1, SUBS2)), rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER)), 
+                            BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 # } ; NODES3]}) .
+
+    eq renameVars({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [NODES2 ; rNode({NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, IRREDTLIST2, BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 # }) ; NODES3]})
+                    = renameVars({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,M >, | NCOUNTER, 
+                            VCOUNTER + getVarsNumber(applySub((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)), rename(getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2),VCOUNTER))),
+                            SCOUNTER |, 
+                            [NODES1], 
+                            [NODES2 ; {NODEID1, 
+                            {applySub(T1, rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER)), 
+                            TYPE1, CTX1, RLABEL1, 
+                            applySub(SUBS1, rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER)), 
+                            applySub(SUBS2, rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER)), 
+                            QID1}, 
+                            reduceSub(MOD, applySub(ACSUBS1, applySub(SUBS1, rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER)))), 
+                            applySub((IRREDTLIST2, getIrreducibilityTerm(MOD, RLABEL1, SUBS2)), rename((getVars(T1) ;; getRangeVars(SUBS1 ; SUBS2)),VCOUNTER)),
+                            BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 # } ; NODES3]}) [owise] .
+
+    --- If there are not more nodes to rename, continue
+    eq renameVars({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, [NODES1], [NODES2]})
+                    = unifyTerms({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, [NODES1], [NODES2]}) [owise] .
+   
+    ----------------------------------------------------------------------------------------------------------
+    --- Try to unify a term related to a generated node and get solutions                                  ---
+    ----------------------------------------------------------------------------------------------------------
+    
+    eq unifyTerms({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                [NODES1], [{NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, IRREDTLIST2, BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 # } ; NODES2]})
+                    = termSolutions({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, 
+                            [NODES1], [{NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, ACSUBS1, IRREDTLIST2, BRANCH1, DEPTH1, PARENTID, 
+                            # SOLUTIONS1 ; findSolutions(MOD, T1 =? TTERM, VOPTIONS, IRREDTLIST1, 0) # } ; NODES2]}) .
+
+    --- If Max solutions reached, return output (remove unifiers left iteratively first)
+    eq termSolutions({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < 0,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [NODES1], [NODES2 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, IRREDTLIST2, BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 ; {SUBS1, QID1} # } ; NODES3]})
+            = termSolutions(
+                    {can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < 0,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+                    [NODES1], [NODES2 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, IRREDTLIST2, BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 # } ; NODES3]}) .
+
+    eq termSolutions({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < 0,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [NODES1], [NODES2 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, IRREDTLIST2, BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 # } ; NODES3]})
+            = toString({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < 0,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+                    [NODES1 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, IRREDTLIST2, BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 # }], [NODES2 ; NODES3]}) [owise] .
+
+    --- Get solutions from unifiers when MaxSol = unbounded
+    eq termSolutions({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < unbounded,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [NODES1], [NODES2 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, IRREDTLIST2, BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 ; {SUBS1, QID1} ; SOLUTIONS2 # } ; NODES3]})
+            = termSolutions({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < unbounded,M >, | NCOUNTER, VCOUNTER, SCOUNTER + 1 |,
+               [NODES1], [NODES2 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, IRREDTLIST2, BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 ; {SCOUNTER, SUBS1} ; SOLUTIONS2 # } ; NODES3]}) .
+
+    --- Get solutions from unifiers when MaxSol is a nat > 0
+    eq termSolutions({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < s(N),M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [NODES1], [NODES2 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, IRREDTLIST2, BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 ; {SUBS1, QID1} ; SOLUTIONS2 # } ; NODES3]})
+            = termSolutions({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER + 1 |,
+               [NODES1], [NODES2 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, IRREDTLIST2, BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 ; {SCOUNTER, SUBS1} ; SOLUTIONS2 # } ; NODES3]}) .
+
+    --- If all unifiers have been processed, continue with the node generation
+    eq termSolutions({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < NZN,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+        [NODES1], [NODES2 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, IRREDTLIST2, BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 # } ; NODES3]})
+            = generateNode({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < NZN,M >, | NCOUNTER, VCOUNTER, SCOUNTER |,
+                    [NODES1], [NODES2 ; {NODEID1, NARRAPPLYRES1, ACSUBS1, IRREDTLIST2, BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 # } ; NODES3]}) [owise] .    
+
+
+
+    ----------------------------------------------------------------------------------------------------------
+    --- Prepare the output so it can be readable by an user / web interface                                ---
+    ----------------------------------------------------------------------------------------------------------
+
+    --- Return the desired output
+    eq toString(noSolutions) = No solutions found .
+
+    eq toString({can, MOD, ITERM SEARCH TTERM, IRREDTLIST1, (VOPTIONS), < N,M >, | NCOUNTER, VCOUNTER, SCOUNTER |, [NODES1], [NODES2]}) 
+        = printSolutions(NODES1, 1) .
+
+    eq printSolutions(empty, SCOUNTER) = empty .
+
+    eq printSolutions(({0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 ; {SOLID, SUBS1} # } ; NODES1), SCOUNTER)
+        = {ITERM,none,SUBS1,IRREDTLIST1,empty}, 
+           printSolutions(({0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 # } ; NODES1), s(SCOUNTER)) .
+
+    eq printSolutions(({0, ITERM, none, IRREDTLIST1, 0, 0, 0, # noSolution # } ; NODES1), SCOUNTER)
+        = printSolutions(NODES1, SCOUNTER) .
+
+    eq printSolutions(({NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, 
+        ACSUBS1, IRREDTLIST1, BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 ; {SOLID, SUBS3} # } ; NODES1), SCOUNTER)
+        = {T1,ACSUBS1,SUBS3,IRREDTLIST1,empty}, 
+           printSolutions(({NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, 
+                ACSUBS1, IRREDTLIST1, BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 # } ; NODES1), s(SCOUNTER)) .
+
+    eq printSolutions(({NODEID1, NARRAPPLYRES1, ACSUBS1, IRREDTLIST1, BRANCH1, DEPTH1, PARENTID, # noSolution # } ; NODES1), SCOUNTER)
+        = printSolutions(NODES1, SCOUNTER) .
+        
+endfm

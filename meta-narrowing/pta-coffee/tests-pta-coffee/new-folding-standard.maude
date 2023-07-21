@@ -1,0 +1,13 @@
+mod EXECUTE-MOD is
+  protecting NARROWING .
+  protecting PTA-COFFEE .
+endm
+
+reduce in EXECUTE-MOD :
+       smt fnarrowing [100,unbounded] in upModule('PTA-COFFEE,false) :
+          upTerm([ preparingCoffee : X1:Real ; X2:Real ] < P1:Real ; P2:Real ; P3:Real > )
+          =>* 
+          upTerm(< L:Location : X1':Real ; X2':Real > < P1:Real ; P2:Real ; P3:Real > ) 
+          with condition: 
+          upTerm(X1:Real === X2:Real and X1:Real >= 0/1 and P1:Real >= 0/1 
+                                 and P2:Real >= 0/1 and P3:Real >= 0/1) .
