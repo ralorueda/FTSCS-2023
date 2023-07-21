@@ -1,12 +1,5 @@
 # FTSCS-2023
 
-## Developers
-Raúl López-Rueda (rloprue@upv.es), Julia Sapiña (jsapina@upv.es) and Santiago Escobar (sescobar@upv.es)
-
-Universitat Politècnica de València
-
-Camino de Vera s/n, 46022, Valencia, Spain
-
 ## Introduction
 This repository includes the files needed to use the SMT canonical narrowing folding. This algorithm allows to perform symbolic reachability analysis, supporting rewrite theories with SMT constraints specified in conditional rules. In addition, it allows the use of irreducibility constraints and the folding technique.
 
