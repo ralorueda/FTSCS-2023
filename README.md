@@ -1,14 +1,10 @@
 # FTSCS-2023
 
 ## Developers
-Raúl López-Rueda | rloprue@upv.es
-
-Julia Sapiña | jsapina@upv.es
-
-Santiago Escobar | sescobar@upv.es
-
+Raúl López-Rueda (rloprue@upv.es), Julia Sapiña (jsapina@upv.es) and Santiago Escobar (sescobar@upv.es)
 
 Universitat Politècnica de València
+
 Camino de Vera s/n, 46022, Valencia, Spain
 
 ## Introduction
