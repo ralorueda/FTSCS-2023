@@ -330,10 +330,6 @@ mod NARROWING-UI is
     rl < OID : CID | ATS, module: M > => < OID : CID | none > write(stdout, OID, error(0)) .
 endm
 
----set trace on .
----set trace select on  .
----trace select do-narrowing .
-
 erew in NARROWING-UI : init .
 
 eof
