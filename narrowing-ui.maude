@@ -9,7 +9,7 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
 )***
 
-set advisory off .
+set show advisories off .
 
 load file.maude
 load narrowing.maude
