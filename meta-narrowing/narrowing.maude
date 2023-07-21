@@ -1,3 +1,5 @@
+set show advisories off .
+
 load standard.maude
 load canonical.maude
 load standard-smt.maude
@@ -6,6 +8,7 @@ load folding-standard.maude
 load folding-canonical.maude
 load folding-standard-smt.maude
 load folding-canonical-smt.maude
+
 
 fmod NARROWING is
     protecting STANDARD-NARROWING .
