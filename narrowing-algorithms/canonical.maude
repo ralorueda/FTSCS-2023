@@ -321,7 +321,14 @@ fmod CANONICAL-NARROWING is
     eq printSolutions(empty, SCOUNTER) = empty .
 
     eq printSolutions(({0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 ; {SOLID, SUBS1} # } ; NODES1), SCOUNTER)
-        = {ITERM,none,SUBS1,IRREDTLIST1,empty}, 
+        = (### Solution SCOUNTER ###
+           state: ITERM
+           accumulated substitution: 
+           none
+           variant unifier:
+           SUBS1
+           irreducible terms:
+           IRREDTLIST1) 
            printSolutions(({0, ITERM, none, IRREDTLIST1, 0, 0, 0, # SOLUTIONS1 # } ; NODES1), s(SCOUNTER)) .
 
     eq printSolutions(({0, ITERM, none, IRREDTLIST1, 0, 0, 0, # noSolution # } ; NODES1), SCOUNTER)
@@ -329,7 +336,14 @@ fmod CANONICAL-NARROWING is
 
     eq printSolutions(({NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, 
         ACSUBS1, IRREDTLIST1, BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 ; {SOLID, SUBS3} # } ; NODES1), SCOUNTER)
-        = {T1,ACSUBS1,SUBS3,IRREDTLIST1,empty}, 
+        = (### Solution SCOUNTER ###
+           state: T1
+           accumulated substitution: 
+           ACSUBS1
+           variant unifier:
+           SUBS3
+           irreducible terms:
+           IRREDTLIST1) 
            printSolutions(({NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, 
                 ACSUBS1, IRREDTLIST1, BRANCH1, DEPTH1, PARENTID, # SOLUTIONS1 # } ; NODES1), s(SCOUNTER)) .
 
