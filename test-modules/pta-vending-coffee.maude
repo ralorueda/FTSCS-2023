@@ -43,7 +43,7 @@ mod PTA-VENDING-COFFEE is
     crl [add-sugar-tick] : [ addSugar : X1 ; X2 ] < P1 ; P2 ; P3 > < M ; C > => < addSugar : X1' ; X2' > < P1 ; P2 ; P3 > < M ; C >
                         if (X1' === X1 + T and X2' === X2 + T and X2' <= P2 and T >= 0/1) = true [nonexec] .
 
-    crl [preparing-coffee-coffee] : < preparingCoffee : X1 ; X2 > < P1 ; P2 ; P3 > < M ; C + 1 > => [ done : X1' ; X2 ] < P1 ; P2 ; P3 > < M ; C + 1 >
+    crl [preparing-coffee-coffee] : < preparingCoffee : X1 ; X2 > < P1 ; P2 ; P3 > < M ; C + 1 > => [ done : X1' ; X2 ] < P1 ; P2 ; P3 > < M ; C >
                         if (X1' === 0/1 and X2 === P3 and X1' <= 10/1) = true [nonexec] .
 
     crl [preparing-coffee-tick] : [ preparingCoffee : X1 ; X2 ] < P1 ; P2 ; P3 > < M ; C > => < preparingCoffee : X1' ; X2' > < P1 ; P2 ; P3 > < M ; C >
