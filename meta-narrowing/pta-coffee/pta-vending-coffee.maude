@@ -7,12 +7,12 @@ mod PTA-VENDING-COFFEE is
 
     sorts Coin Money .
     subsort Coin < Money .
-    ops $ q : -> Coin .
-    op empty : -> Money .
-    op __ : Money Money -> Money [assoc comm id: empty] .
+    ops $ q : -> Coin [ctor] .
+    op mt : -> Money [ctor] .
+    op __ : Money Money -> Money [assoc comm id: mt] .
 
     sort CNat .
-    ops 0 1 : -> CNat .
+    ops 0 1 : -> CNat [ctor] .
     op _+_ : CNat CNat -> CNat [ctor assoc comm id: 0] .
 
     vars X1 X2 X1' X2' : Real .
@@ -43,13 +43,13 @@ mod PTA-VENDING-COFFEE is
     crl [add-sugar-tick] : [ addSugar : X1 ; X2 ] < P1 ; P2 ; P3 > < M ; C > => < addSugar : X1' ; X2' > < P1 ; P2 ; P3 > < M ; C >
                         if (X1' === X1 + T and X2' === X2 + T and X2' <= P2 and T >= 0/1) = true [nonexec] .
 
-    crl [preparing-coffee-coffee] : < preparingCoffee : X1 ; X2 > < P1 ; P2 ; P3 > < M ; C + 1 > => [ done : X1' ; X2 ] < P1 ; P2 ; P3 > < M ; C + 1 >
+    crl [preparing-coffee-coffee] : < preparingCoffee : X1 ; X2 > < P1 ; P2 ; P3 > < M ; C + 1 > => [ done : X1' ; X2 ] < P1 ; P2 ; P3 > < M ; C >
                         if (X1' === 0/1 and X2 === P3 and X1' <= 10/1) = true [nonexec] .
 
     crl [preparing-coffee-tick] : [ preparingCoffee : X1 ; X2 ] < P1 ; P2 ; P3 > < M ; C > => < preparingCoffee : X1' ; X2' > < P1 ; P2 ; P3 > < M ; C >
                         if (X1' === X1 + T and X2' === X2 + T and X2' <= P3 and T >= 0/1) = true [nonexec] .
 
-    crl [done-sleep] : < done : X1 ; X2 > < P1 ; P2 ; P3 > < M ; C > => [ idle : X1 ; X2 ] < P1 ; P2 ; P3 > < empty ; 0 >
+    crl [done-sleep] : < done : X1 ; X2 > < P1 ; P2 ; P3 > < M ; C > => [ idle : X1 ; X2 ] < P1 ; P2 ; P3 > < M ; C >
                         if (X1 === 10/1) = true .
 
     crl [done-bStart] : < done : X1 ; X2 > < P1 ; P2 ; P3 > < q q q M ; C > => [ addSugar : X1' ; X2' ] < P1 ; P2 ; P3 > < M ; C >
@@ -58,3 +58,9 @@ mod PTA-VENDING-COFFEE is
     crl [done-tick] : [ done : X1 ; X2 ] < P1 ; P2 ; P3 > < M ; C > => < done : X1' ; X2' > < P1 ; P2 ; P3 > < M ; C >
                         if (X1' === X1 + T and X2' === X2 + T and X1' <= 10/1 and T >= 0/1) = true [nonexec] .
 endm
+
+***(
+{ fold, canonical } vu-narrow in PTA-VENDING-COFFEE : [ idle : X1:Real ; X2:Real ] < P1:Real ; P2:Real ; P3:Real > < q q q ; 1 > =>* < done : X1':Real ; X2':Real > < P1:Real ; P2:Real ; P3:Real >  < mt ; 1 >  such that X1:Real === X2:Real and X1:Real >= 0/1 and P1:Real >= 0/1 and P2:Real >= 0/1 and P3:Real >= 0/1 .
+{ fold, canonical } vu-narrow in PTA-VENDING-COFFEE : [ idle : X1:Real ; X2:Real ] < P1:Real ; P2:Real ; P3:Real > < M:Money ; C:CNat > =>* < done : X1':Real ; X2':Real > < P1:Real ; P2:Real ; P3:Real >  < M':Money ; C':CNat >  such that X1:Real === X2:Real and X1:Real >= 0/1 and P1:Real >= 0/1 and P2:Real >= 0/1 and P3:Real >= 0/1 .
+{ fold, canonical } vu-narrow in PTA-VENDING-COFFEE : [ idle : X1:Real ; X2:Real ] < P1:Real ; P2:Real ; P3:Real > < $ $ ; C:CNat > =>* < done : X1':Real ; X2':Real > < P1:Real ; P2:Real ; P3:Real >  < M':Money ; C':CNat >  such that X1:Real === X2:Real and X1:Real >= 0/1 and P1:Real >= 0/1 and P2:Real >= 0/1 and P3:Real >= 0/1 .
+)***
