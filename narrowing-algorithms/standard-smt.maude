@@ -412,26 +412,12 @@ fmod STANDARD-SMT-NARROWING is
     eq printSolutions(empty, SCOUNTER) = empty .
 
     eq printSolutions(({0, ITERM, none, 0, 0, 0, {SMT1 : true}, # {SOLID, SUBS1} ; SOLUTIONS1 # } ; NODES1), SCOUNTER)
-        = (### Solution SCOUNTER ###
-           state: ITERM
-           accumulated substitution: 
-           none
-           variant unifier:
-           SUBS1
-           SMT constraint:
-           {SMT1 : true}) 
+        = {ITERM,none,SUBS1,empty,SMT1},
            printSolutions(({0, ITERM, none, 0, 0, 0, {SMT1 : true}, # SOLUTIONS1 # } ; NODES1), s(SCOUNTER)) .
 
     eq printSolutions(({NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, 
         ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : true}, # {SOLID, SUBS3} ; SOLUTIONS1 # } ; NODES1), SCOUNTER)
-        = (### Solution SCOUNTER ###
-           state: T1
-           accumulated substitution: 
-           ACSUBS1
-           variant unifier:
-           SUBS3
-           SMT constraint:
-           {SMT1 : true}) 
+        = {T1,ACSUBS1,SUBS3,empty,SMT1},
            printSolutions(({NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, 
                 ACSUBS1, BRANCH1, DEPTH1, PARENTID, {SMT1 : true}, # SOLUTIONS1 # } ; NODES1), s(SCOUNTER)) .
 

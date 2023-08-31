@@ -456,7 +456,7 @@ fmod FOLDING-STANDARD-SMT-NARROWING is
     eq checkFoldingConditions(MOD, empty, {T1, SMT1}, {T2, SMT2}, MATCHCOUNTER)
         = if metaVariantMatch(MOD, T1 <=? T2, empty, '%, none, MATCHCOUNTER) :: Substitution
           then
-            if metaCheck(MOD,'_implies_[SMT2,applySub(SMT1, metaVariantMatch(MOD, T1 <=? T2, empty, '%, none, MATCHCOUNTER))]) == true
+            if metaCheck(MOD,'not_['_implies_[SMT2,applySub(SMT1, metaVariantMatch(MOD, T1 <=? T2, empty, '%, none, MATCHCOUNTER))]]) == true
             then
                 true
             else
@@ -536,7 +536,7 @@ fmod FOLDING-STANDARD-SMT-NARROWING is
     ----------------------------------------------------------------------------------------------------------
     --- Prepare the output so it can be readable                                                           ---
     ----------------------------------------------------------------------------------------------------------
-
+    
     --- Return the desired output
     eq toString(noSolutions) = No solutions found .
     
@@ -549,26 +549,12 @@ fmod FOLDING-STANDARD-SMT-NARROWING is
     eq printSolutions(empty, SCOUNTER) = empty .
 
     eq printSolutions(({0, ITERM, none, 0, 0, 0, {SMT1 : true}, unfolded, # {SOLID, SUBS1} ; SOLUTIONS1 # } ; NODES1), SCOUNTER)
-        = (### Solution SCOUNTER ###
-           state: ITERM
-           accumulated substitution: 
-           none
-           variant unifier:
-           SUBS1
-           SMT constraint:
-           {SMT1 : true}) 
+        = {ITERM,none,SUBS1,empty,SMT1},
            printSolutions(({0, ITERM, none, 0, 0, 0, {SMT1 : true}, unfolded, # SOLUTIONS1 # } ; NODES1), s(SCOUNTER)) .
 
     eq printSolutions(({NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, 
         ACSUBS1, BRANCH1, DEPTH1, PARENTID1, {SMT1 : true}, unfolded, # SOLUTIONS1 ; {SOLID, SUBS3} # } ; NODES1), SCOUNTER)
-        = (### Solution SCOUNTER ###
-           state: T1
-           accumulated substitution: 
-           ACSUBS1
-           variant unifier:
-           SUBS3
-           SMT constraint:
-           {SMT1 : true}) 
+        = {T1,ACSUBS1,SUBS3,empty,SMT1},
            printSolutions(({NODEID1, {T1, TYPE1, CTX1, RLABEL1, SUBS1, SUBS2, QID1}, 
                 ACSUBS1, BRANCH1, DEPTH1, PARENTID1, {SMT1 : true}, unfolded, # SOLUTIONS1 # } ; NODES1), s(SCOUNTER)) .
 

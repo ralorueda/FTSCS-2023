@@ -394,7 +394,7 @@ fmod COMMON-NARROWING is
     
     --- Output sorts and operators
     sorts NarrowingOutput ParsedSolution ParsedSolutions .
-    subsort Nodes < ParsedSolution < ParsedSolutions < NarrowingOutput .
+    subsort ParsedSolution < ParsedSolutions < NarrowingOutput .
 
     op toString(_) : NarrowingInfo -> NarrowingOutput .
     op _,_,_,(_),<_>,|_|,[_],[_] : Algorithm Module NarrowingProblem VariantOptionSet Bounds Counters Nodes Nodes -> NarrowingOutput . --- standard
@@ -407,8 +407,6 @@ fmod COMMON-NARROWING is
     --- User readable output operators
     op __ : ParsedSolutions ParsedSolutions -> ParsedSolutions [assoc id: empty format(n d d)] .
     op printSolutions : Nodes Nat -> ParsedSolutions .
-    op ### Node _ ### state:_rule:_accumulated substitution:_variant unifier:_parent id:_folded?:_SMT constraint:_solutions:_ : Nat Term Qid Substitution Substitution Nat FoldingId Term Solutions
-            -> ParsedSolution [format(n s s s n n n n n s d n s d n s n n n n s n n n n)]   .
     op ### Solution _ ### state:_accumulated substitution:_variant unifier:_ : Nat Term Substitution Substitution 
             -> ParsedSolution [format(nn s s s n n n d d n d d d)] . --- standard
     op ### Solution _ ### state:_accumulated substitution:_variant unifier:_irreducible terms:_ : Nat Term Substitution Substitution TermList 
