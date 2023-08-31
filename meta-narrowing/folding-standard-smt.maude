@@ -456,7 +456,7 @@ fmod FOLDING-STANDARD-SMT-NARROWING is
     eq checkFoldingConditions(MOD, empty, {T1, SMT1}, {T2, SMT2}, MATCHCOUNTER)
         = if metaVariantMatch(MOD, T1 <=? T2, empty, '%, none, MATCHCOUNTER) :: Substitution
           then
-            if metaCheck(MOD,'_implies_[SMT2,applySub(SMT1, metaVariantMatch(MOD, T1 <=? T2, empty, '%, none, MATCHCOUNTER))]) == true
+            if metaCheck(MOD,'not_['_implies_[SMT2,applySub(SMT1, metaVariantMatch(MOD, T1 <=? T2, empty, '%, none, MATCHCOUNTER))]]) == true
             then
                 true
             else
